@@ -406,9 +406,9 @@ SpinlockIRQ::release(flags_t flags)
 class ReadWriteLock { public:
 
     inline ReadWriteLock();
-// #if CLICK_LINUXMODULE && defined(CONFIG_SMP)
+#if ((CLICK_LINUXMODULE && defined(CONFIG_SMP)) || (CLICK_USERLEVEL && HAVE_MULTITHREAD))
     inline ~ReadWriteLock();
-// #endif
+#endif
 
     inline void acquire_read();
     inline bool attempt_read();
