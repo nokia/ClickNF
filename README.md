@@ -1,11 +1,12 @@
 ClickNF
 ---------------------
-The code published in this repository is partly described in "CliMB: Enabling Network Function Composition with
-Click Middleboxes" paper available at https://dl.acm.org/citation.cfm?id=2940152 . ClickNF is an extension of CliMB 
-and has been extended in several directions. For instance, ClickNF takes advantage of hardware offloading, multicore 
-scalability, timing wheels, and an epoll-based API to improve performance. Event handling allows applications to be 
-rescheduled when I/O requests complete. L7 modularity and SSL/TLS termination provide building blocks for novel 
-network functions to be deployed with little effort. 
+The code published in the repository is partly described in "CliMB: Enabling Network Function Composition with 
+Click Middleboxes" paper available at https://dl.acm.org/citation.cfm?id=2940152 . CliMB provides a full-fledged 
+modular TCP layer supporting congestion control, TCP options, both blocking and nonblocking I/O, as well as socket 
+and zero-copy APIs to applications. As a result, any TCP network function may now be realized in Click. ClickNF 
+extends CliMB in several directions. For instance, ClickNF takes advantage of hardware offloading, multicore 
+scalability, timing wheels, and an epoll-based API to improve performance. Finally, L7 modularity and SSL/TLS 
+termination provide building blocks for novel network functions to be deployed with little effort. 
 
 If you have any question/issue with the code, please use github or contact me at massimo.gallo@nokia-bell-labs.com
 
@@ -63,10 +64,10 @@ To configure ClicNF run this command in its root directory:
 
 in which:
 
---enable-epoll 				enables epoll data structure
---enable-user-multithread --enable-dpdk enable DPDK input interfaces and packet wrapping (RTE_SDK and RTE_TARGET should be exported)
---enable-openssl 			enables ssl* elements
---enable-batch 				enables batch processing between elements (May need batcher and unbatcher elements in the graph)
+- --enable-epoll 			 	enables epoll data structure
+- --enable-user-multithread --enable-dpdk 	enable DPDK input interfaces and packet wrapping (RTE_SDK and RTE_TARGET should be exported)
+- --enable-openssl 				enables ssl* elements
+- --enable-batch 				enables batch processing between elements (May need batcher and unbatcher elements in the graph)
 
 To compile ClickNF run this command in its root directory:
 
