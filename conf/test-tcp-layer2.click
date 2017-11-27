@@ -1,4 +1,4 @@
-+elementclass TCPLayer {	__REST__ $rest |
+elementclass TCPLayer {	__REST__ $rest |
 
 	// General TCP info
 	TCPInfo($rest);
