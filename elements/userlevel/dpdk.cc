@@ -32,6 +32,11 @@
 # include <rte_version.h>
 # include <rte_errno.h>
 # include <rte_ip.h>
+# include <rte_pci.h>
+#if (RTE_VERSION >= RTE_VERSION_NUM(17,11,0,0))
+#include <rte_bus_pci.h>
+#endif
+
 
 # include <string.h>
 # include "dpdk.hh"
@@ -50,7 +55,7 @@ uint8_t DPDK::key[RSS_HASH_KEY_LENGTH] = {
 DPDK::MemPool *DPDK::mempool = NULL;
 
 DPDK::DPDK() 
-	: _nthreads(0), _speed(0), _task(NULL)
+	:   _task(NULL), _nthreads(0), _speed(0)
 {
 }
 
@@ -247,56 +252,65 @@ DPDK::configure(Vector<String> &conf, ErrorHandler *errh)
 	return 0;
 }
 
+# if RTE_VERSION >= RTE_VERSION_NUM(17, 8, 0, 0)
+static int
+#   if RTE_VERSION >= RTE_VERSION_NUM(17, 11, 0, 0)
+lsi_event_callback(uint16_t port, enum rte_eth_event_type type, void *param, void *ret_param)
+#   else
+lsi_event_callback(uint8_t port, enum rte_eth_event_type type, void *param, void *ret_param)  
+#   endif
+# else
 static void
-lsi_event_callback(uint8_t port, enum rte_eth_event_type type, void *d)
+lsi_event_callback(uint8_t port, enum rte_eth_event_type type, void *param)
+# endif
 {
+# if RTE_VERSION >= RTE_VERSION_NUM(17, 8, 0, 0)
+	RTE_SET_USED(ret_param);
+# endif
 	if (type != RTE_ETH_EVENT_INTR_LSC)
+# if RTE_VERSION >= RTE_VERSION_NUM(17, 8, 0, 0)
+		return 0;
+# else
 		return;
+#endif
 
 	struct rte_eth_link link;
 	rte_eth_link_get_nowait(port, &link);
 
-	DPDK *dpdk = static_cast<DPDK *>(d);
+	DPDK *dpdk = static_cast<DPDK *>(param);
 
 	if (link.link_status == 0) {
 		click_chatter("%s: port %u down", dpdk->class_name(), uint32_t(port));
 		dpdk->set_rate(1);
 		dpdk->set_active(false);
+# if RTE_VERSION >= RTE_VERSION_NUM(17, 8, 0, 0)
+		return 0;
+# endif
 	}
 	else {
-		click_chatter("%s: port %u up", dpdk->class_name(), uint32_t(port));
-		dpdk->set_rate(1000000/link.link_speed); //Rate is in Mbps
+		click_chatter("%s: port %u up %d ", dpdk->class_name(), uint32_t(port));
+		dpdk->set_rate(1000000/link.link_speed);
 		dpdk->set_active(true);
+# if RTE_VERSION >= RTE_VERSION_NUM(17, 8, 0, 0)
+		return 1;
+# endif
 	}
 }
 
-void 
-DPDK::rx_intr_callback(struct rte_intr_handle *intr_handle, void *data)
-{
-	// Disable future interrupts
-	rte_intr_disable(intr_handle);
 
-	// Enable polling (not sure if callback runs in the receiving core)
-	DPDK *dpdk = static_cast<DPDK *>(data);
-	unsigned c = click_current_cpu_id();
-	Task *task = dpdk->_task[c].task;
-	task->reschedule();
-}
-
-int
-rx_intr_callback_register(uint8_t port, rte_intr_callback_fn cb, void *data)
-{
-	if (!rte_eth_dev_is_valid_port(port))
-		return -ENODEV;
-
-	struct rte_eth_dev *dev = &rte_eth_devices[port];
-	struct rte_intr_handle *intr_handle = &dev->pci_dev->intr_handle;
-	if (!intr_handle->intr_vec)
-		return -EPERM;
-
-	return rte_intr_callback_register(intr_handle, cb, data);
-}
-
+// TODO Test
+// static void 
+// rx_intr_callback(void *data)
+// {
+// // 	// Disable future interrupts
+// // 	rte_intr_disable(intr_handle);
+// 
+// 	// Enable polling (not sure if callback runs in the receiving core)
+// 	DPDK *dpdk = static_cast<DPDK *>(data);
+// 	unsigned c = click_current_cpu_id();
+// 	Task *task = dpdk->_task[c].task;
+// 	task->reschedule();
+// }
 
 int
 DPDK::initialize(ErrorHandler *errh)
@@ -439,8 +453,8 @@ DPDK::initialize(ErrorHandler *errh)
 		tx_conf.txq_flags |= ETH_TXQ_FLAGS_NOOFFLOADS;
 
 	// Set callback for link interrupt
-	retval = rte_eth_dev_callback_register(_port, RTE_ETH_EVENT_INTR_LSC, \
-													  lsi_event_callback, this);
+	retval = rte_eth_dev_callback_register(_port, RTE_ETH_EVENT_INTR_LSC, lsi_event_callback, (void*)this);
+	
 	if (retval != 0)
 		return errh->error("Callback function registration failed");
 
@@ -562,18 +576,15 @@ DPDK::initialize(ErrorHandler *errh)
 	// Print RSS information
 	// print_rss_info();
 
-	// Enable RX interrupt
-//	retval = rx_intr_callback_register(port, rx_intr_callback, this);
-//	if (retval != 0)
-//		return errh->error("RX callback registration failed");
+	
+	// Enable RX interrupt  TODO Test 
+// 	struct rte_intr_handle *intr_handle = &dev_info.pci_dev->intr_handle;
+// 	retval =  rte_intr_callback_register(intr_handle, rx_intr_callback, (void *)this);
+// 	if (retval != 0)
+// 		return errh->error("RX callback registration failed");
 
 	check_link_status();
 
-	// Save link speed
-	struct rte_eth_link link;
-	rte_eth_link_get(_port, &link);
-	_rate = 1000000/link.link_speed; //Rate is in Mbps
-	
 	return 0;
 }
 
@@ -628,16 +639,22 @@ DPDK::check_link_status()
 #define CHECK_INTERVAL 100 // 100ms 
 #define MAX_CHECK_TIME 100 // 10s 
 	struct rte_eth_link link;
-
+	
+	set_rate(1);
+	set_active(false);
+	
 	for (int count = 0; count <= MAX_CHECK_TIME; count++) {
 		memset(&link, 0, sizeof(link));
 		rte_eth_link_get_nowait(_port, &link);
 
 		if (link.link_status) {
-			click_chatter("%s: port %d, link up, speed %u Mbps, %s\n", 
+			set_rate(1000000/link.link_speed); 
+			set_active(true);
+			
+			click_chatter("%s: port %d, link up, speed %u Mbps, %s %u\n", 
 			            class_name(), _port, (unsigned)link.link_speed,
 				        (link.link_duplex == ETH_LINK_FULL_DUPLEX) ? 
-			                    "full-duplex" : "half-duplex");
+			                    "full-duplex" : "half-duplex", _rate);
 			break;
 		}
 

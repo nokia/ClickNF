@@ -41,8 +41,8 @@ SETUP
 
 ClickNF uses few external libraries that can be installed separately: 
 
-1) DPDK: ClickNF has its own version of a DPDK module (16.11). To install and configure DPDK please refer to 
-   http://dpdk.org/ 
+1) DPDK: ClickNF has its own version of a DPDK module, i.e., different from the one already present in click codebase. ClickNF has been tested with 
+   dpdk from version 16.11 up to 17.11. To install and configure DPDK please refer to http://dpdk.org/ 
 
 2) OpenSSL: ClickNF provide a set of modules to interface with OpenSSL. To install it (Debian, Ubuntu) please use 
 

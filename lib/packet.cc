@@ -1379,7 +1379,7 @@ Packet::static_initialize()
 */
     // Sizes
     uint16_t priv_data_size = RTE_ALIGN(sizeof(AllAnno), CLICK_CACHE_LINE_SIZE);
-  uint16_t data_room_size = RTE_PKTMBUF_HEADROOM + RTE_MBUF_DEFAULT_DATAROOM + 9162;
+    uint16_t data_room_size = RTE_PKTMBUF_HEADROOM + RTE_MBUF_DEFAULT_DATAROOM + 9162;
     uint32_t size = sizeof(struct rte_mbuf) + priv_data_size + data_room_size;
 
     // Private data

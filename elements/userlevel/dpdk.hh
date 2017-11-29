@@ -119,58 +119,7 @@ class DPDK : public Element { public:
 	static MemPool *mempool;
 
 	static uint8_t key[RSS_HASH_KEY_LENGTH];
-
-  private:
-
-	uint16_t tx_batch();
-	uint16_t rx_batch();
-	WritablePacket *mbuf2packet(struct rte_mbuf *);
-	struct rte_mbuf *packet2mbuf(Packet *);
-	void print_rss_info();
-	void check_link_status();
-	static void rx_intr_callback(struct rte_intr_handle *, void *);
-
-//	static uint16_t tx_batch(DPDK *dpdk, unsigned c);
-//	static uint16_t rx_batch(DPDK *dpdk, unsigned c);
-
-//	static bool pull_rx_task(Task *, void *);
-//	static bool pull_tx_task(Task *, void *);
-//	static bool push_rx_task(Task *, void *);
-//	static bool push_tx_task(Task *, void *);
-
-	bool _active;
-	bool _rx_jumbo_frame;
-	bool _rx_strip_crc;
-	bool _rx_checksum;
-	bool _rx_tcp_lro;
-	bool _rx_header_split;
-	bool _rx_timestamp_anno;
-	bool _rx_mac_hdr_anno;
-	bool _rx_pkt_type_anno;
-	bool _rx_flow_control;
-	bool _rx_scatter;
-	bool _tx_flow_control;
-	bool _tx_ip_checksum;
-	bool _tx_tcp_checksum;
-	bool _tx_udp_checksum;
-	bool _tx_tcp_tso;
-
-    int _port;
-    uint8_t _nthreads;
-	uint32_t _rate;
-	uint64_t _drain_us;
-	uint64_t _drain_tsc;
-	uint32_t _burst;
-	uint32_t _rx_max_pkt_len;
-	uint16_t _rx_split_hdr_size;
-	uint32_t _rx_ring_size;
-	uint32_t _tx_ring_size;
-	uint32_t _speed;
-	EtherAddress _macaddr;
-
-	// Statistics
-    struct rte_eth_stats _stats;
-
+	
 	class PacketQueue {
 	  public:
 		PacketQueue() : _head(NULL), _tail(NULL), _size(0) { }
@@ -210,28 +159,72 @@ class DPDK : public Element { public:
 		Packet *_tail;
 		size_t _size;
 	};
-
+	
 	struct TaskData {
-//		Task *tx_task;
-//		Task *rx_task;
 		Task *task;
 		uint64_t prev_tsc;
 		uint64_t tx_count;
 		uint64_t rx_count;
 		PacketQueue tx_pkts;
 		PacketQueue rx_pkts;
-//		Vector<struct rte_mbuf *> tx_mbuf;
-// 		NotifierSignal nonfull_signal;
-// 		NotifierSignal nonempty_signal;
-// 		ActiveNotifier nonfull_note;
-// 		ActiveNotifier nonempty_note;
-//		Timer timer;
-
-//		TaskData() : tx_task(NULL), rx_task(NULL), tx_count(0), rx_count(0) { }
 		TaskData() : task(NULL), tx_count(0), rx_count(0) { }
 	} CLICK_ALIGNED(CLICK_CACHE_LINE_SIZE);
+	
+	
 	TaskData *_task;
 
+
+  private:
+
+	uint16_t tx_batch();
+	uint16_t rx_batch();
+	WritablePacket *mbuf2packet(struct rte_mbuf *);
+	struct rte_mbuf *packet2mbuf(Packet *);
+	void print_rss_info();
+	void check_link_status();
+
+//	static uint16_t tx_batch(DPDK *dpdk, unsigned c);
+//	static uint16_t rx_batch(DPDK *dpdk, unsigned c);
+
+//	static bool pull_rx_task(Task *, void *);
+//	static bool pull_tx_task(Task *, void *);
+//	static bool push_rx_task(Task *, void *);
+//	static bool push_tx_task(Task *, void *);
+
+	bool _active;
+	bool _rx_jumbo_frame;
+	bool _rx_strip_crc;
+	bool _rx_checksum;
+	bool _rx_tcp_lro;
+	bool _rx_header_split;
+	bool _rx_timestamp_anno;
+	bool _rx_mac_hdr_anno;
+	bool _rx_pkt_type_anno;
+	bool _rx_flow_control;
+	bool _rx_scatter;
+	bool _tx_flow_control;
+	bool _tx_ip_checksum;
+	bool _tx_tcp_checksum;
+	bool _tx_udp_checksum;
+	bool _tx_tcp_tso;
+
+	int _port;
+	uint8_t _nthreads;
+	uint32_t _rate;
+	uint64_t _drain_us;
+	uint64_t _drain_tsc;
+	uint32_t _burst;
+	uint32_t _rx_max_pkt_len;
+	uint16_t _rx_split_hdr_size;
+	uint32_t _rx_ring_size;
+	uint32_t _tx_ring_size;
+	uint32_t _speed;
+	EtherAddress _macaddr;
+
+	// Statistics
+	struct rte_eth_stats _stats;
+	
+	
 	static String read_handler(Element *, void *) CLICK_COLD;
 
 #endif // HAVE_DPDK

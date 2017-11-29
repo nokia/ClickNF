@@ -87,24 +87,31 @@ ifeq ($(CONFIG_RTE_LIBRTE_MBUF),y)
 LIBS += -lrte_mbuf
 endif
 
+ifeq ($(CONFIG_RTE_LIBRTE_PCI),y)
+LIBS += -lrte_pci
+endif
+
+ifeq ($(CONFIG_RTE_LIBRTE_PCI_BUS),y)
+LIBS += -lrte_bus_pci
+endif
+
+ifeq ($(CONFIG_RTE_LIBRTE_VDEV_BUS),y)
+LIBS += -lrte_bus_vdev
+endif
+
+
 ifeq ($(CONFIG_RTE_LIBRTE_IP_FRAG),y)
 LIBS += -lrte_ip_frag
 endif
 
 ifeq ($(CONFIG_RTE_LIBRTE_ETHER),y)
-  ifeq ($(shell [ \( $(RTE_VER_YEAR) -ge 16 \) -a \( $(RTE_VER_MONTH) -ge 11 \) ] && echo true),true)
+  ifeq ($(shell [ \( \( $(RTE_VER_YEAR) -ge 16 \) -a \( $(RTE_VER_MONTH) -ge 11  \) \) -o \( $(RTE_VER_YEAR) -ge 17 \) ] && echo true),true)
     LIBS += -lrte_ethdev
+    LIBS += -lrte_net
   else
     LIBS += -lethdev
   endif
 endif
-
-ifeq ($(shell [ \( $(RTE_VER_YEAR) -ge 16 \) -a \( $(RTE_VER_MONTH) -ge 11 \) ] && echo true),true)
-    ifeq ($(CONFIG_RTE_LIBRTE_NET),y)
-      LIBS += -lrte_net
-    endif
-endif
-
 
 ifeq ($(CONFIG_RTE_LIBRTE_MALLOC),y)
 LIBS += -lrte_malloc
@@ -112,6 +119,9 @@ endif
 
 ifeq ($(CONFIG_RTE_LIBRTE_MEMPOOL),y)
 LIBS += -lrte_mempool
+  ifeq ($(shell [ \( \( $(RTE_VER_YEAR) -ge 17 \) -a \( $(RTE_VER_MONTH) -ge 05  \) \)] && echo true),true)
+    LIBS += -lrte_mempool_ring
+  endif
 endif
 
 ifeq ($(CONFIG_RTE_LIBRTE_RING),y)
@@ -146,6 +156,10 @@ endif
 ifeq ($(CONFIG_RTE_LIBRTE_PMD_XENVIRT),y)
 LIBS += -lrte_pmd_xenvirt
 LIBS += -lxenstore
+endif
+
+ifeq ($(CONFIG_RTE_LIBRTE_VHOST_NUMA),y)
+LIBS += -lnuma
 endif
 
 ifeq ($(CONFIG_RTE_BUILD_SHARED_LIB),n)
