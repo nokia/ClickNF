@@ -99,7 +99,6 @@ ifeq ($(CONFIG_RTE_LIBRTE_VDEV_BUS),y)
 LIBS += -lrte_bus_vdev
 endif
 
-
 ifeq ($(CONFIG_RTE_LIBRTE_IP_FRAG),y)
 LIBS += -lrte_ip_frag
 endif
@@ -119,7 +118,7 @@ endif
 
 ifeq ($(CONFIG_RTE_LIBRTE_MEMPOOL),y)
 LIBS += -lrte_mempool
-  ifeq ($(shell [ \( \( $(RTE_VER_YEAR) -ge 17 \) -a \( $(RTE_VER_MONTH) -ge 05  \) \)] && echo true),true)
+  ifeq ($(shell [ \( \( $(RTE_VER_YEAR) -ge 17 \) -a \( $(RTE_VER_MONTH) -ge 05  \) \) ] && echo true),true)
     LIBS += -lrte_mempool_ring
   endif
 endif
