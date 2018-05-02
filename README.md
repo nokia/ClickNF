@@ -8,6 +8,8 @@ extends CliMB in several directions. For instance, ClickNF takes advantage of ha
 scalability, timing wheels, and an epoll-based API to improve performance. Finally, L7 modularity and SSL/TLS 
 termination provide building blocks for novel network functions to be deployed with little effort. 
 
+**ClickNF has been accepted for publication in Usenix ATC 2018!** 
+
 If you have any question/issue with the code, please use github or contact me at massimo.gallo@nokia-bell-labs.com
 
 COPYRIGHT AND LICENSE
@@ -49,7 +51,8 @@ ClickNF uses few external libraries that can be installed separately:
 apt-get install openssl
 
 3) libboost-1.61 context. To install libboost's context library (a coroutine library provided by libboost) please refer to 
-http://www.boost.org/ for more details about installation.
+http://www.boost.org/ for more details about installation. Make sure libboost_context.so.1.61.0 and libboost_context.so are 
+installed in /usr/lib/x86_64-linux-gnu/
 
 ClickNF automatically uses context library if it is installed (up to libboost-1.61). If context is not installed in the system 
 ClickNF uses the slowest coroutine library provided in linux, ucontext. 
