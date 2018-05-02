@@ -65,7 +65,6 @@ void
 Batcher::txbatch_timer_hook(TCPTimer *t, void *data __attribute__((unused)))
 {
     Packet * p = head;
-    void* param = data;
     
     len = 0;
     head = NULL;
