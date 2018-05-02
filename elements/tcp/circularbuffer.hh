@@ -192,7 +192,7 @@ class CircularBuffer { public:
 
 	T _empty_value;       // Empty element
 	size_type _head;      // First element
-	size_type _tail;	  // Last element
+	size_type _tail;      // Last element
 	size_type _size;      // Buffer size
 	size_type _capacity;  // Buffer capacity
 	Vector<T> _buffer;    // Actual buffer
