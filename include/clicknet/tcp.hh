@@ -1,5 +1,5 @@
 /*
- * tcp.{cc,hh} -- generic definitions for TCP
+ * tcp.{hh} -- generic definitions for TCP
  * Rafael Laufer, Massimo Gallo
  *
  * Copyright (c) 2017 Nokia Bell Labs

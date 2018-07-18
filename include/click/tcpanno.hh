@@ -23,53 +23,56 @@
  *
  */
 
+#include "packet_anno.hh"
+
 #ifndef CLICK_TCPANNO_HH
 #define CLICK_TCPANNO_HH
 CLICK_DECLS
 
 // Packet annotations for TCP
+// NOTE! Not compatible with some Click annotations in packet_anno.hh
 
-#define TCP_SOCKFD_ANNO_OFFSET    0
-#define TCP_SOCKFD_ANNO_SIZE      4
+#define TCP_SOCKFD_ANNO_OFFSET    0 + DST_IP_ANNO_SIZE
+#define TCP_SOCKFD_ANNO_SIZE      4 
 #define TCP_SOCKFD_ANNO(p)        (p)->anno_u32(TCP_SOCKFD_ANNO_OFFSET)
 #define SET_TCP_SOCKFD_ANNO(p, v) (p)->set_anno_u32(TCP_SOCKFD_ANNO_OFFSET, (v))
 
-#define TCP_STATE_ANNO_OFFSET     4
+#define TCP_STATE_ANNO_OFFSET     4 + DST_IP_ANNO_SIZE
 #define TCP_STATE_ANNO_SIZE       8
 #define TCP_STATE_ANNO(p)        (TCPState*)(p)->anno_u64(TCP_STATE_ANNO_OFFSET)
 #define SET_TCP_STATE_ANNO(p, v) (p)->set_anno_u64(TCP_STATE_ANNO_OFFSET, (v))
 
-#define TCP_RTT_ANNO_OFFSET      12
+#define TCP_RTT_ANNO_OFFSET      12 + DST_IP_ANNO_SIZE
 #define TCP_RTT_ANNO_SIZE         4
 #define TCP_RTT_ANNO(p)          (p)->anno_u32(TCP_RTT_ANNO_OFFSET)
 #define SET_TCP_RTT_ANNO(p, v)   (p)->set_anno_u32(TCP_RTT_ANNO_OFFSET, (v))
 
-#define TCP_WND_ANNO_OFFSET      16
+#define TCP_WND_ANNO_OFFSET      16 + DST_IP_ANNO_SIZE
 #define TCP_WND_ANNO_SIZE         4
 #define TCP_WND_ANNO(p)          (p)->anno_u32(TCP_WND_ANNO_OFFSET)
 #define SET_TCP_WND_ANNO(p, v)   (p)->set_anno_u32(TCP_WND_ANNO_OFFSET, (v))
 
-#define TCP_SEQ_ANNO_OFFSET      20
+#define TCP_SEQ_ANNO_OFFSET      20 + DST_IP_ANNO_SIZE
 #define TCP_SEQ_ANNO_SIZE         4
 #define TCP_SEQ_ANNO(p)          (p)->anno_u32(TCP_SEQ_ANNO_OFFSET)
 #define SET_TCP_SEQ_ANNO(p, v)   (p)->set_anno_u32(TCP_SEQ_ANNO_OFFSET, (v))
 
-#define TCP_ACKED_ANNO_OFFSET    24
+#define TCP_ACKED_ANNO_OFFSET    24 + DST_IP_ANNO_SIZE
 #define TCP_ACKED_ANNO_SIZE       4
 #define TCP_ACKED_ANNO(p)        (p)->anno_u32(TCP_ACKED_ANNO_OFFSET)
 #define SET_TCP_ACKED_ANNO(p, v) (p)->set_anno_u32(TCP_ACKED_ANNO_OFFSET, (v))
 
-#define TCP_MSS_ANNO_OFFSET      28
+#define TCP_MSS_ANNO_OFFSET      28 + DST_IP_ANNO_SIZE
 #define TCP_MSS_ANNO_SIZE         2
 #define TCP_MSS_ANNO(p)          (p)->anno_u16(TCP_MSS_ANNO_OFFSET)
 #define SET_TCP_MSS_ANNO(p, v)   (p)->set_anno_u16(TCP_MSS_ANNO_OFFSET, (v))
 
-#define TCP_OPLEN_ANNO_OFFSET    30
+#define TCP_OPLEN_ANNO_OFFSET    30 + DST_IP_ANNO_SIZE
 #define TCP_OPLEN_ANNO_SIZE       1
 #define TCP_OPLEN_ANNO(p)        (p)->anno_u8(TCP_OPLEN_ANNO_OFFSET)
 #define SET_TCP_OPLEN_ANNO(p, v) (p)->set_anno_u8(TCP_OPLEN_ANNO_OFFSET, (v))
 
-#define TCP_FLAGS_ANNO_OFFSET    31
+#define TCP_FLAGS_ANNO_OFFSET    31 + DST_IP_ANNO_SIZE
 #define TCP_FLAGS_ANNO_SIZE       1
 #define TCP_FLAGS_ANNO(p)        (p)->anno_u8(TCP_FLAGS_ANNO_OFFSET)
 #define SET_TCP_FLAGS_ANNO(p, v) (p)->set_anno_u8(TCP_FLAGS_ANNO_OFFSET, (v))
@@ -79,6 +82,16 @@ CLICK_DECLS
 #define TCP_FLAG_MS        (1 << 2)  // More (buffered) segments coming
 #define TCP_FLAG_SOCK_ADD  (1 << 3)  // Socket add
 #define TCP_FLAG_SOCK_DEL  (1 << 4)  // Socket del
+#define TCP_FLAG_SOCK_OUT  (1 << 5)  // Socket out
+#define TCP_FLAG_SOCK_ERR  (1 << 6)  // Socket err
+
+// Annotations valid only for App - TCPEpoll(Server, Client)
+// NOTE May overwrite TCP Anno
+
+#define TCP_DPORT_ANNO_OFFSET     4 + DST_IP_ANNO_SIZE
+#define TCP_DPORT_ANNO_SIZE       2
+#define TCP_DPORT_ANNO(p)          (p)->anno_u16(TCP_DPORT_ANNO_OFFSET)
+#define SET_TCP_DPORT_ANNO(p, v)   (p)->set_anno_u16(TCP_DPORT_ANNO_OFFSET, (v))
 
 // SACKed flag
 #define TCP_SACK_FLAG_ANNO(p)          (TCP_FLAGS_ANNO(p) & TCP_FLAG_SACK)
@@ -101,19 +114,32 @@ CLICK_DECLS
 #define RESET_TCP_MS_FLAG_ANNO(p)  \
                      SET_TCP_FLAGS_ANNO(p, TCP_FLAGS_ANNO(p) & (~TCP_FLAG_MS))
 
-// Socket add
+// Socket add. Signal a sockfd need to be / has been added  
 #define TCP_SOCK_ADD_FLAG_ANNO(p)  (TCP_FLAGS_ANNO(p) & TCP_FLAG_SOCK_ADD)
 #define SET_TCP_SOCK_ADD_FLAG_ANNO(p)    \
                   SET_TCP_FLAGS_ANNO(p, TCP_FLAGS_ANNO(p) | TCP_FLAG_SOCK_ADD)
 #define RESET_TCP_SOCK_ADD_FLAG_ANNO(p)  \
                   SET_TCP_FLAGS_ANNO(p, TCP_FLAGS_ANNO(p) & (~TCP_FLAG_SOCK_ADD))
 
-// Socket del
+// Socket del. Signal a sockfd need to be / has been deleted  
 #define TCP_SOCK_DEL_FLAG_ANNO(p)  (TCP_FLAGS_ANNO(p) & TCP_FLAG_SOCK_DEL)
 #define SET_TCP_SOCK_DEL_FLAG_ANNO(p)    \
                  SET_TCP_FLAGS_ANNO(p, TCP_FLAGS_ANNO(p) | TCP_FLAG_SOCK_DEL)
 #define RESET_TCP_SOCK_DEL_FLAG_ANNO(p)  \
                  SET_TCP_FLAGS_ANNO(p, TCP_FLAGS_ANNO(p) & (~TCP_FLAG_SOCK_DEL))
+                 
+// Socket out. Signal the sockfd is ready for sending data (i.e., is connected or has space left in the output buffer)
+#define TCP_SOCK_OUT_FLAG_ANNO(p)  (TCP_FLAGS_ANNO(p) & TCP_FLAG_SOCK_OUT)
+#define SET_TCP_SOCK_OUT_FLAG_ANNO(p)    \
+                 SET_TCP_FLAGS_ANNO(p, TCP_FLAGS_ANNO(p) | TCP_FLAG_SOCK_OUT)
+#define RESET_TCP_SOCK_OUT_FLAG_ANNO(p)  \
+                 SET_TCP_FLAGS_ANNO(p, TCP_FLAGS_ANNO(p) & (~TCP_FLAG_SOCK_OUT))
 
+// Socket err. Signal the sockfd has an error. 
+#define TCP_SOCK_ERR_FLAG_ANNO(p)  (TCP_FLAGS_ANNO(p) & TCP_FLAG_SOCK_ERR)
+#define SET_TCP_SOCK_ERR_FLAG_ANNO(p)    \
+                 SET_TCP_FLAGS_ANNO(p, TCP_FLAGS_ANNO(p) | TCP_FLAG_SOCK_ERR)
+#define RESET_TCP_SOCK_ERR_FLAG_ANNO(p)  \
+                 SET_TCP_FLAGS_ANNO(p, TCP_FLAGS_ANNO(p) & (~TCP_FLAG_SOCK_ERR))
 CLICK_ENDDECLS
 #endif // CLICK_TCPANNO_HH
