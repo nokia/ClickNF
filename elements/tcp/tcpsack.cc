@@ -28,7 +28,6 @@
 #include <click/machine.hh>
 #include <clicknet/tcp.h>
 #include "tcpsack.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 TCPSack::TCPSack()

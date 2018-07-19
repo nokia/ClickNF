@@ -29,7 +29,6 @@
 #include <click/list.hh>
 #include <click/glue.hh>
 #include "tcptimer.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 class Router;
@@ -104,7 +103,7 @@ TCPTimerSet::run_one_timer(TCPTimer *t)
 inline void
 TCPTimerSet::schedule_after(TCPTimer *t, Timestamp delta)
 {
-	click_assert(!delta.is_negative());
+	assert(!delta.is_negative());
 	schedule_at_steady(t, Timestamp::now_steady() + delta);
 }
 

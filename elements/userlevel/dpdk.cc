@@ -16,6 +16,7 @@
 # include <click/standard/scheduleinfo.hh>
 # include <click/packet.hh>
 # include <click/straccum.hh>
+# include <click/tcpanno.hh>
 # include <clicknet/ether.h>
 # include <clicknet/ip.h>
 # include <clicknet/ip6.h>
@@ -40,7 +41,6 @@
 
 # include <string.h>
 # include "dpdk.hh"
-# include "../tcp/tcpanno.hh"
 #endif // HAVE_DPDK
 CLICK_DECLS
 
@@ -51,8 +51,6 @@ uint8_t DPDK::key[RSS_HASH_KEY_LENGTH] = {
 	0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
 	0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A
 };
-
-DPDK::MemPool *DPDK::mempool = NULL;
 
 DPDK::DPDK() 
 	:   _task(NULL), _nthreads(0), _speed(0)
@@ -193,39 +191,6 @@ DPDK::configure(Vector<String> &conf, ErrorHandler *errh)
 
 	// Get the number of threads
 	_nthreads = master()->nthreads();
-
-	if (!mempool) {
-//		mempool = new MemPool[max_socket + 1];
-		mempool = new MemPool[_nthreads];
-		assert(mempool);
-	}
-
-	// Initialize per-thread mempools
-//	for (int s = 0; s <= max_socket; s++) {
-	for (int s = 0; s < _nthreads; s++) {
-		// Check if mempool has already been allocated by another DPDK element
-		if (mempool[s].m)
-			continue;
-
-# if HAVE_DPDK_PACKET
-		// Use Packet mempool
-//		mempool[s].m = rte_mempool_lookup((String("POOL_") + s).c_str());
-		mempool[s].m = Packet::mempool[s];
-# else
-		// Allocate memory for the mbufs
-		// NOTE: For Multicore Cache=0 may impact performance
-		mempool[s].m = rte_pktmbuf_pool_create((String("POOL_") + s).c_str(),
-		                    8 * 1024 - 1,
-		                    RTE_MEMPOOL_CACHE_MAX_SIZE,
-		                    0,
-//		                    RTE_PKTMBUF_HEADROOM + RTE_MBUF_DEFAULT_DATAROOM,
-		                    2048 - sizeof(struct rte_mbuf),
-		                    s);
-
-# endif
-		if (!mempool[s].m)
-			return errh->error("failed to create mempool");
-	}
 
 	// Configure tasks
 	_task = new TaskData[_nthreads];
@@ -466,7 +431,7 @@ DPDK::initialize(ErrorHandler *errh)
 	for (unsigned i = 0; i < _nthreads; ++i) {
 		// RX queue setup
 		retval = rte_eth_rx_queue_setup(_port, i, _rx_ring_size, s, 
-		                                                &rx_conf, mempool[i].m);
+		                                                &rx_conf, Packet::mempool[i]);
 		if (retval < 0)
 			return errh->error("RX queue setup failed");
 
@@ -715,11 +680,6 @@ DPDK::cleanup(CleanupStage)
 		sa << print_stats(_stats) << '\n';
 		click_chatter("%s", sa.take_string().c_str());
 	}
-
-	if (mempool) {
-		delete [] mempool;
-		mempool = NULL;
-	}
 }
 
 # if !HAVE_DPDK_PACKET
@@ -943,7 +903,6 @@ DPDK::tx_batch()
 	unsigned c = click_current_cpu_id();
 	TaskData &t = _task[c];
 	uint32_t tx_count = 0;
-
 	do {
 		uint16_t tx_size = RTE_MIN(t.tx_pkts.size(), _burst);
 		if (tx_size == 0)
@@ -954,7 +913,7 @@ DPDK::tx_batch()
 
 		for (uint32_t i = 0; i < tx_size; i++) {
 			// Convert it to an mbuf
-			struct rte_mbuf *m = packet2mbuf(p);
+			struct rte_mbuf *m = p->packet2mbuf(_tx_ip_checksum, _tx_tcp_checksum, _tx_udp_checksum, _tx_tcp_tso);
 
 			// Update TX buffer
 			tx_mbuf[i] = m;
@@ -990,6 +949,7 @@ DPDK::tx_batch()
 # else
 			Packet *p = t.tx_pkts.front();
 			t.tx_pkts.pop_front();
+			
 			p->kill();
 # endif
 		}
@@ -1043,7 +1003,7 @@ DPDK::rx_batch()
 	Packet* prev = NULL;
 #endif
 	for (uint16_t i = 0; i < rx_count; i++) {
-		WritablePacket *p = mbuf2packet(rx_mbuf[i]);
+		WritablePacket *p = Packet::mbuf2packet(rx_mbuf[i]);
 # if HAVE_DPDK_PACKET && HAVE_BATCH 
 		// Prefetch annotations and first data cahce line of the next packet 
 		// if we have batched output (might not be helpful if we don't have batched output)
@@ -1133,133 +1093,6 @@ DPDK::rx_batch()
 	t.rx_count += rx_count;
 
 	return rx_count;
-}
-
-WritablePacket *
-DPDK::mbuf2packet(struct rte_mbuf *m)
-{
-# if HAVE_DPDK_PACKET
-	WritablePacket *p = Packet::make(m);
-# else
-	// Get packet data and length
-	uint8_t *d = (uint8_t *)rte_mbuf_to_baddr(m);
-	uint16_t len = rte_pktmbuf_headroom(m) + \
-	               rte_pktmbuf_data_len(m) + \
-	               rte_pktmbuf_tailroom(m);
-
-	// Create the packet with zero-copy and own destructor
-	WritablePacket *p = Packet::make(d, len, destroy, m);
-
-	// Adjust pointers for headroom and tailroom
-	p->pull(rte_pktmbuf_headroom(m));
-	p->take(rte_pktmbuf_tailroom(m));
-# endif
-
-	return p;
-}
-
-struct rte_mbuf *
-DPDK::packet2mbuf(Packet *p)
-{
-	struct rte_mbuf *m;
-# if HAVE_DPDK_PACKET
-	m = p->mbuf();
-# else
-	// Zero-copy operation if an unshared DPDK packet
-	if (is_dpdk_packet(p) && !p->shared()) {
-		m = (struct rte_mbuf *)p->destructor_argument();
-		m->data_off = p->headroom();
-		p->set_buffer_destructor(fake_destroy);
-	}
-	else {
-//		m = rte_pktmbuf_alloc(mempool[rte_socket_id()].m);
-		int s = rte_lcore_index(rte_lcore_id());
-		m = rte_pktmbuf_alloc(mempool[s].m);
-		if (!m)
-			return NULL;
-
-		m->data_off = p->headroom();
-		rte_memcpy(rte_pktmbuf_mtod(m, char *), p->data(), p->length());
-	}
-
-	// Increase mbuf to match the packet length
-	rte_pktmbuf_append(m, p->length());
-# endif
-
-	// Checksum and TCP segmentation offloading
-	if (_tx_ip_checksum  || _tx_tcp_checksum || _tx_udp_checksum) {
-		// Ethernet header
-		m->l2_len = sizeof(click_ether);
-		click_ether *eh = rte_pktmbuf_mtod(m, click_ether *);
-		uint16_t ether_type = ntohs(eh->ether_type);
-
-		// VLAN header
-		if (ether_type == ETHERTYPE_8021Q) {
-			m->l2_len = sizeof(click_ether_vlan);
-			click_ether_vlan *vh = (click_ether_vlan *)(eh + 1);
-			ether_type = ntohs(vh->ether_vlan_encap_proto);
-		}
-
-		// IP checksum
-		uint8_t proto = 0;
-		if (ether_type == ETHERTYPE_IP) {
-			click_ip *ip = (click_ip *)((char *)eh + m->l2_len);
-			m->l3_len = ip->ip_hl << 2;
-			m->ol_flags |= PKT_TX_IPV4;
-			proto = ip->ip_p;
-			if (_tx_ip_checksum) {
-				ip->ip_sum = 0;
-				m->ol_flags |= PKT_TX_IP_CKSUM;
-			}
-		}
-		else if (ether_type == ETHERTYPE_IP6) {
-			click_ip6 *ip = (click_ip6 *)((char *)eh + m->l2_len);
-			m->l3_len = sizeof(click_ip6);
-			m->ol_flags |= PKT_TX_IPV6;
-			proto = ip->ip6_nxt;
-		}
-
-		// TCP/UDP checksum
-		char *l3_hdr = (char *)eh + m->l2_len;
-		if (proto == IP_PROTO_UDP && _tx_udp_checksum) {
-			m->ol_flags |= PKT_TX_UDP_CKSUM;
-			click_udp *uh = (click_udp *)(l3_hdr + m->l3_len);
-			if (ether_type == ETHERTYPE_IP) {
-				struct ipv4_hdr *ip = (struct ipv4_hdr *)l3_hdr;
-				uh->uh_sum = rte_ipv4_phdr_cksum(ip, m->ol_flags);
-			}
-			else if (ether_type == ETHERTYPE_IP6) {
-				struct ipv6_hdr *ip = (struct ipv6_hdr *)l3_hdr;
-				uh->uh_sum = rte_ipv6_phdr_cksum(ip, m->ol_flags);
-			}
-		}
-		else if (proto == IPPROTO_TCP && _tx_tcp_checksum) {
-			m->ol_flags |= PKT_TX_TCP_CKSUM;
-			click_tcp *th = (click_tcp *)(l3_hdr + m->l3_len);
-			m->l4_len = (th->th_off << 2);
-			
-			uint32_t data = m->pkt_len - m->l4_len - m->l3_len -m->l2_len;
-			
-			// TCP segmentation offloading (must be before cksum)
-			// Silently disable TSO in case of SYN, RST and zero sized packet  
-			if (_tx_tcp_tso && TCP_MSS_ANNO(p) && !(TCP_SYN(th) || TCP_RST(th) || TCP_FIN(th) || data < 1)) {
-
-				m->ol_flags |= PKT_TX_TCP_SEG;
-				m->tso_segsz = TCP_MSS_ANNO(p);
-			}
-
-			if (ether_type == ETHERTYPE_IP) {
-				struct ipv4_hdr *ip = (struct ipv4_hdr *)l3_hdr;
-				th->th_sum = rte_ipv4_phdr_cksum(ip, m->ol_flags);
-			}
-			else if (ether_type == ETHERTYPE_IP6) {
-				struct ipv6_hdr *ip = (struct ipv6_hdr *)l3_hdr;
-				th->th_sum = rte_ipv6_phdr_cksum(ip, m->ol_flags);
-			}
-		}
-	}
-
-	return m;
 }
 
 void

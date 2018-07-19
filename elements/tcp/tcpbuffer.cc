@@ -31,7 +31,6 @@
 #include "tcpbuffer.hh"
 #include "tcptrimpacket.hh"
 #include "tcpsack.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 TCPBuffer::TCPBuffer() : PktQueue(), _last(NULL)

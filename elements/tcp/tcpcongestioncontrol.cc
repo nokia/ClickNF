@@ -34,7 +34,6 @@
 #include "tcpcongestioncontrol.hh"
 #include "tcpstate.hh"
 #include "util.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 TCPCongestionControl::TCPCongestionControl()

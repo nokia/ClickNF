@@ -31,7 +31,6 @@
 #include <clicknet/tcp.h>
 #include "tcpresetter.hh"
 #include "tcpstate.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 TCPResetter::TCPResetter()

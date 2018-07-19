@@ -30,7 +30,6 @@
 #include "tcpstate.hh"
 #include "tcpoptionsparser.hh"
 #include "util.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 TCPOptionsParser::TCPOptionsParser()

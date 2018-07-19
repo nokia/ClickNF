@@ -26,9 +26,10 @@
 
 #include <click/config.h>
 #include <clicknet/tcp.h>
+#include <click/tcpanno.hh>
+#include <clicknet/tcp.hh>
 #include "tcpsetseqanno.hh"
-#include "tcpanno.hh"
-#include "tcp.hh"
+
 CLICK_DECLS
 
 TCPSetSeqAnno::TCPSetSeqAnno()

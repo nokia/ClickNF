@@ -29,8 +29,8 @@
 #include <click/router.hh>
 #include <clicknet/ip.h>
 #include <clicknet/tcp.h>
+#include <clicknet/tcp.hh>
 #include <linux/tcp.h>
-#include "tcp.hh"
 #include "tcptimers.hh"
 #include "tcpstate.hh"
 #include "tcpinfo.hh"

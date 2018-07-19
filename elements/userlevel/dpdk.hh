@@ -12,6 +12,7 @@
 #include <click/etheraddress.hh>
 #include <click/task.hh>
 #include <click/master.hh>
+#include <click/packetqueue.hh>
 #if HAVE_DPDK
 # include <rte_ethdev.h>
 #endif // HAVE_DPDK
@@ -108,58 +109,9 @@ class DPDK : public Element { public:
 	                            uint32_t length, uint32_t tailroom);
 	inline static WritablePacket *make(const void *data, uint32_t length);
 	inline static WritablePacket *make(uint32_t length);
-
 	String print_stats(struct rte_eth_stats stats);
-
-	struct MemPool {
-		struct rte_mempool *m;
-
-		MemPool() : m(NULL) { }
-	} CLICK_ALIGNED(CLICK_CACHE_LINE_SIZE);
-	static MemPool *mempool;
-
 	static uint8_t key[RSS_HASH_KEY_LENGTH];
-	
-	class PacketQueue {
-	  public:
-		PacketQueue() : _head(NULL), _tail(NULL), _size(0) { }
 
-		inline Packet *front() const { return _head; }
-		inline Packet *back() const { return _tail; }
-		inline bool empty() const { return _size == 0; }
-		inline uint32_t size() const { return _size; }
-		inline void push_back(Packet *p) {
-			p->set_next(NULL);
-			if (empty())
-				_head = p;
-			else
-				_tail->set_next(p);
-			_tail = p;
-			_size++;
-		}
-		inline void push_front(Packet *p) {
-			p->set_next(_head);
-			if (empty())
-				_tail = p;
-			_head = p;
-			_size++;
-		}
-		inline void pop_front() {
-			if (_size > 0) {
-				Packet *p = front();
-				if (p == _tail)
-					_tail = NULL;
-				_head = p->next();
-				_size--;
-			}
-		}
-
-	  private:
-		Packet *_head;
-		Packet *_tail;
-		size_t _size;
-	};
-	
 	struct TaskData {
 		Task *task;
 		uint64_t prev_tsc;
@@ -169,8 +121,7 @@ class DPDK : public Element { public:
 		PacketQueue rx_pkts;
 		TaskData() : task(NULL), tx_count(0), rx_count(0) { }
 	} CLICK_ALIGNED(CLICK_CACHE_LINE_SIZE);
-	
-	
+
 	TaskData *_task;
 
 
@@ -178,8 +129,6 @@ class DPDK : public Element { public:
 
 	uint16_t tx_batch();
 	uint16_t rx_batch();
-	WritablePacket *mbuf2packet(struct rte_mbuf *);
-	struct rte_mbuf *packet2mbuf(Packet *);
 	void print_rss_info();
 	void check_link_status();
 
@@ -249,13 +198,7 @@ DPDK::make(uint32_t length)
 	return make(RTE_PKTMBUF_HEADROOM, NULL, length, 0);
 }
 
-# if !HAVE_DPDK_PACKET
-inline bool
-DPDK::is_dpdk_packet(Packet* p)
-{
-	return p->buffer_destructor() == destroy;
-}
-# endif // !HAVE_DPDK_PACKET
+
 #endif // HAVE_DPDK
 
 CLICK_ENDDECLS

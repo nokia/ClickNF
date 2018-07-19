@@ -30,7 +30,6 @@
 #include "tcpsack.hh"
 #include "tcpstate.hh"
 #include "util.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 TCPAckOptionsEncap::TCPAckOptionsEncap()

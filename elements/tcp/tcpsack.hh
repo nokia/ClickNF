@@ -27,7 +27,7 @@
 #define CLICK_TCPSACK_HH
 #include <click/packet.hh>
 #include <click/vector.hh>
-#include "tcp.hh"
+#include <clicknet/tcp.hh>
 CLICK_DECLS
 
 class TCPSackBlock { public:

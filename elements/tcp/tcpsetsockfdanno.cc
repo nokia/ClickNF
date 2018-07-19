@@ -28,8 +28,8 @@
 #include <click/args.hh>
 #include <click/error.hh>
 #include <click/router.hh>
+#include <click/tcpanno.hh>
 #include "tcpsetsockfdanno.hh"
-#include "tcpanno.hh"
 #include "tcpinfo.hh"
 CLICK_DECLS
 

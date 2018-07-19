@@ -28,7 +28,7 @@ tcp_layer[0]
 
 dpdk0
   -> HostEtherFilter($DEV0)
-  -> class :: FastClassifier(12/0800,         // IP - 1st out of FastClassifier may be send batches
+  -> class :: FastClassifier(12/0800,         // IP - 1st out of FastClassifier may send batches
                              12/0806 20/0002, // ARP response
                              12/0806 20/0001); // ARP query
      class[2] -> [0]arpr
@@ -36,7 +36,7 @@ dpdk0
      class[1] -> [1]arpq;
      class[0] -> Strip(14)
               -> CheckIPHeader(CHECKSUM false)
-              -> FastIPClassifier(tcp dst host $ADDR0)  // 1st out of FastIPClassifier may be send batches
+              -> FastIPClassifier(tcp dst host $ADDR0)  // 1st out of FastIPClassifier may send batches
               -> CheckTCPHeader(CHECKSUM false)
               -> [0]tcp_layer;
 

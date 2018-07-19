@@ -31,8 +31,10 @@
 #include <click/timer.hh>
 #include <click/string.hh>
 #include <click/straccum.hh>
+#include <click/tcpanno.hh>
 #include <clicknet/ip.h>
 #include <clicknet/tcp.h>
+#include <clicknet/tcp.hh>
 #include <clicknet/ether.h>
 #include "tcphashallocator.hh"
 #include "pktqueue.hh"
@@ -40,8 +42,6 @@
 #include "tcplist.hh"
 #include "tcpbuffer.hh"
 #include "tcptimer.hh"
-#include "tcpanno.hh"
-#include "tcp.hh"
 #include "util.hh"
 CLICK_DECLS
 

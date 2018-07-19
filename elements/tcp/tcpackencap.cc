@@ -28,7 +28,6 @@
 #include <clicknet/tcp.h>
 #include "tcpackencap.hh"
 #include "tcpstate.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 TCPAckEncap::TCPAckEncap()

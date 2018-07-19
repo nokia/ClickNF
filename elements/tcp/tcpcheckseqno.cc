@@ -29,7 +29,6 @@
 #include <clicknet/tcp.h>
 #include "tcpcheckseqno.hh"
 #include "tcpstate.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 TCPCheckSeqNo::TCPCheckSeqNo()

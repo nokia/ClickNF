@@ -27,7 +27,7 @@
 #include <click/config.h>
 #include <clicknet/tcp.h>
 #include "tcpgetseqanno.hh"
-#include "tcpanno.hh"
+#include <click/tcpanno.hh>
 CLICK_DECLS
 
 TCPGetSeqAnno::TCPGetSeqAnno()

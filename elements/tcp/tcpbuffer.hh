@@ -31,7 +31,6 @@
 #include <clicknet/tcp.h>
 #include "pktqueue.hh"
 #include "tcpsack.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 class TCPBuffer : private PktQueue { public:

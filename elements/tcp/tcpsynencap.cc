@@ -30,7 +30,6 @@
 #include "tcpsynencap.hh"
 #include "tcpstate.hh"
 #include "tcpinfo.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 TCPSynEncap::TCPSynEncap()

@@ -28,10 +28,10 @@
 #include <click/args.hh>
 #include <click/error.hh>
 #include <click/standard/scheduleinfo.hh>
+#include <click/tcpanno.hh>
 #if HAVE_OPENSSL
 # include <openssl/err.h>
 #endif
-#include "elements/tcp/tcpanno.hh"
 #include "elements/tcp/tcpinfo.hh"
 #include "sslclient.hh"
 CLICK_DECLS

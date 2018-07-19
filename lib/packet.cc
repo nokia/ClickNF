@@ -24,6 +24,13 @@
 #include <click/packet_anno.hh>
 #include <click/glue.hh>
 #include <click/sync.hh>
+# include <click/tcpanno.hh>
+# include <clicknet/ether.h>
+# include <clicknet/ip.h>
+# include <clicknet/ip6.h>
+# include <clicknet/tcp.h>
+# include <clicknet/udp.h>
+# include <clicknet/tcp.hh>
 #if CLICK_USERLEVEL || CLICK_MINIOS
 # include <unistd.h>
 # if HAVE_DPDK_PACKET
@@ -725,10 +732,9 @@ Packet::clone()
     int s = rte_lcore_index(rte_lcore_id());
     struct rte_mbuf *mi = rte_pktmbuf_clone(mbuf(), mempool[s]);
     if (!mi) {
-	click_chatter("failed to clone DPDK packet");
+	click_chatter("Failed to clone DPDK packet. Obj %d/%d (available/in use). CLONED %d", rte_mempool_avail_count(mempool[s]), rte_mempool_in_use_count(mempool[s]), mbuf()->ol_flags & IND_ATTACHED_MBUF);
 	return NULL;
     }
-
     Packet *p = reinterpret_cast<Packet *>(mi);
 
 //    rte_prefetch0(aanno());
@@ -1344,42 +1350,155 @@ cleanup_pool(PacketPool *pp, int global)
 }
 #endif
 
-#if HAVE_DPDK_PACKET
-// Vector<struct rte_mempool *> Packet::mempool;
+#if HAVE_DPDK
 Packet::mempoolTable* Packet::mempool;
-//Vector<struct rte_mempool *> Packet::mempool_4K;
-//Vector<struct rte_mempool *> Packet::mempool_8K;
-//Vector<struct rte_mempool *> Packet::mempool_16K;
-//Vector<struct rte_mempool *> Packet::mempool_32K;
-//Vector<struct rte_mempool *> Packet::mempool_64K;
+
+
+void 
+Packet::destroy(unsigned char *, size_t, void *buf){
+	rte_pktmbuf_free(static_cast<struct rte_mbuf *>(buf));
+}
+
+WritablePacket *
+Packet::mbuf2packet(struct rte_mbuf *m)
+{
+# if HAVE_DPDK_PACKET
+	WritablePacket *p = make(m);
+# else
+	// Get packet data and length
+	uint8_t *d = (uint8_t *)rte_mbuf_to_baddr(m);
+	uint16_t len = rte_pktmbuf_headroom(m) + \
+	               rte_pktmbuf_data_len(m) + \
+	               rte_pktmbuf_tailroom(m);
+
+	// Create the packet with zero-copy and own destructor
+	WritablePacket *p = make(d, len, destroy, m);
+
+	// Adjust pointers for headroom and tailroom
+	p->pull(rte_pktmbuf_headroom(m));
+	p->take(rte_pktmbuf_tailroom(m));
+# endif
+
+	return p;
+}
+
+struct rte_mbuf * 
+Packet::packet2mbuf(bool tx_ip_checksum, bool tx_tcp_checksum, bool tx_udp_checksum, bool tx_tcp_tso)
+{
+	struct rte_mbuf *m;
+# if HAVE_DPDK_PACKET
+	m = mbuf();
+# else
+// 	// Zero-copy operation if an unshared DPDK packet
+// 	if (is_dpdk_packet(this) && !shared()) {
+// 		m = (struct rte_mbuf *)destructor_argument();
+// 		m->data_off = headroom();
+// 		set_buffer_destructor(fake_destroy);
+// 	}
+// 	else {
+	int s = rte_lcore_index(rte_lcore_id());
+	m = rte_pktmbuf_alloc(mempool[s]);
+	if (!m)
+		return NULL;
+	m->data_off = headroom();
+	rte_memcpy(rte_pktmbuf_mtod(m, char *), data(), length());
+
+	// Increase mbuf to match the packet length
+	rte_pktmbuf_append(m, length());
+# endif
+
+	// Checksum and TCP segmentation offloading
+	if (tx_ip_checksum  || tx_tcp_checksum || tx_udp_checksum) {
+		// Ethernet header
+		m->l2_len = sizeof(click_ether);
+		click_ether *eh = rte_pktmbuf_mtod(m, click_ether *);
+		uint16_t ether_type = ntohs(eh->ether_type);
+
+		// VLAN header
+		if (ether_type == ETHERTYPE_8021Q) {
+			m->l2_len = sizeof(click_ether_vlan);
+			click_ether_vlan *vh = (click_ether_vlan *)(eh + 1);
+			ether_type = ntohs(vh->ether_vlan_encap_proto);
+		}
+
+		// IP checksum
+		uint8_t proto = 0;
+		if (ether_type == ETHERTYPE_IP) {
+			click_ip *ip = (click_ip *)((char *)eh + m->l2_len);
+			m->l3_len = ip->ip_hl << 2;
+			m->ol_flags |= PKT_TX_IPV4;
+			proto = ip->ip_p;
+			if (tx_ip_checksum) {
+				ip->ip_sum = 0;
+				m->ol_flags |= PKT_TX_IP_CKSUM;
+			}
+		}
+		else if (ether_type == ETHERTYPE_IP6) {
+			click_ip6 *ip = (click_ip6 *)((char *)eh + m->l2_len);
+			m->l3_len = sizeof(click_ip6);
+			m->ol_flags |= PKT_TX_IPV6;
+			proto = ip->ip6_nxt;
+		}
+
+		// TCP/UDP checksum
+		char *l3_hdr = (char *)eh + m->l2_len;
+		if (proto == IP_PROTO_UDP && tx_udp_checksum) {
+			m->ol_flags |= PKT_TX_UDP_CKSUM;
+			click_udp *uh = (click_udp *)(l3_hdr + m->l3_len);
+			if (ether_type == ETHERTYPE_IP) {
+				struct ipv4_hdr *ip = (struct ipv4_hdr *)l3_hdr;
+				uh->uh_sum = rte_ipv4_phdr_cksum(ip, m->ol_flags);
+			}
+			else if (ether_type == ETHERTYPE_IP6) {
+				struct ipv6_hdr *ip = (struct ipv6_hdr *)l3_hdr;
+				uh->uh_sum = rte_ipv6_phdr_cksum(ip, m->ol_flags);
+			}
+		}
+		else if (proto == IPPROTO_TCP && tx_tcp_checksum) {
+			m->ol_flags |= PKT_TX_TCP_CKSUM;
+			click_tcp *th = (click_tcp *)(l3_hdr + m->l3_len);
+			m->l4_len = (th->th_off << 2);
+			
+			uint32_t data = m->pkt_len - m->l4_len - m->l3_len -m->l2_len;
+			
+			// TCP segmentation offloading (must be before cksum)
+			// Silently disable TSO in case of SYN, RST and zero sized packet  
+			if (tx_tcp_tso && TCP_MSS_ANNO(this) && !(TCP_SYN(th) || TCP_RST(th) || TCP_FIN(th) || data < 1)) {
+
+				m->ol_flags |= PKT_TX_TCP_SEG;
+				m->tso_segsz = TCP_MSS_ANNO(this);
+			}
+
+			if (ether_type == ETHERTYPE_IP) {
+				struct ipv4_hdr *ip = (struct ipv4_hdr *)l3_hdr;
+				th->th_sum = rte_ipv4_phdr_cksum(ip, m->ol_flags);
+			}
+			else if (ether_type == ETHERTYPE_IP6) {
+				struct ipv6_hdr *ip = (struct ipv6_hdr *)l3_hdr;
+				th->th_sum = rte_ipv6_phdr_cksum(ip, m->ol_flags);
+			}
+		}
+	}
+
+	return m;
+}
+
 
 void
 Packet::static_initialize()
 {
-/*
-    int max_socket = 0;
-    for (int port = 0; port < rte_eth_dev_count(); port++)
-	max_socket = RTE_MAX(max_socket, rte_eth_dev_socket_id(port));
-
-    mempool.resize(max_socket + 1, NULL);
-
-    // Initialize per-socket mempools
-    for (int s = 0; s <= max_socket; s++) {
-	// Allocate memory for the mbufs
-	mempool[s] = rte_pktmbuf_pool_create((String("POOL_") + s).c_str(),
-	                 256 * 1024 - 1,
-	                 512,
-	                 RTE_ALIGN(sizeof(AllAnno), CLICK_CACHE_LINE_SIZE),
-	                 RTE_PKTMBUF_HEADROOM + RTE_MBUF_DEFAULT_DATAROOM,
-	                 s);
-
-	if (!mempool[s])
-	    rte_exit(EXIT_FAILURE, "failed to create mempool\n");
-    }
-*/
-    // Sizes
-    uint16_t priv_data_size = RTE_ALIGN(sizeof(AllAnno), CLICK_CACHE_LINE_SIZE);
+    unsigned lcore_id;
+  
+    // size reserved for the data
     uint16_t data_room_size = RTE_PKTMBUF_HEADROOM + RTE_MBUF_DEFAULT_DATAROOM + 9162;
+    
+    
+    // Resize mempool
+    mempool = new mempoolTable[rte_lcore_count()];
+# if HAVE_DPDK_PACKET
+
+    // Reserve space for click annotations
+    uint16_t priv_data_size = RTE_ALIGN(sizeof(AllAnno), CLICK_CACHE_LINE_SIZE);
     uint32_t size = sizeof(struct rte_mbuf) + priv_data_size + data_room_size;
 
     // Private data
@@ -1387,16 +1506,12 @@ Packet::static_initialize()
     priv.mbuf_data_room_size = data_room_size;
     priv.mbuf_priv_size = priv_data_size;
 
-    // Resize mempool
-    mempool = new mempoolTable[rte_lcore_count()];
-
     // Allocate a per-core mempool
-    unsigned lcore_id;
     RTE_LCORE_FOREACH(lcore_id) {
 	int t = rte_lcore_index(lcore_id);
 	mempool[t] = rte_mempool_create(
 	                (String("POOL_") + t).c_str(),           // name
-	                128 * 1024 - 1,                            // pool size
+	                64 * 512 - 1,                          // pool size
 	                size,                                    // element size
 	                RTE_MEMPOOL_CACHE_MAX_SIZE,              // cache size
 	                sizeof(struct rte_pktmbuf_pool_private), // priv size
@@ -1412,8 +1527,24 @@ Packet::static_initialize()
 	    rte_exit(EXIT_FAILURE, "failed to create mempool\n");
     }
 
+    
+# else
+    // Allocate a per-core mempool
+    RTE_LCORE_FOREACH(lcore_id) {
+	int t = rte_lcore_index(lcore_id);
+	mempool[t] = rte_pktmbuf_pool_create(
+				    (String("POOL_") + t).c_str(),      // name
+				    64 * 512 - 1,                     // pool size
+		                    RTE_MEMPOOL_CACHE_MAX_SIZE,         // cache size
+		                    0,                                  // priv size
+		                    data_room_size,                     // data size
+		                    rte_lcore_to_socket_id(lcore_id));  // socket id
+	if (!mempool[t])
+	    rte_exit(EXIT_FAILURE, "failed to create mempool\n");
+    }
+# endif  /* HAVE_DPDK_PACKET */
 }
-#endif /* HAVE_DPDK_PACKET */
+#endif /* HAVE_DPDK */
 
 void
 Packet::static_cleanup()

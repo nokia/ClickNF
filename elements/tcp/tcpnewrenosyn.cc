@@ -32,7 +32,6 @@
 #include "tcpnewrenosyn.hh"
 #include "tcpstate.hh"
 #include "tcpinfo.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 TCPNewRenoSyn::TCPNewRenoSyn()

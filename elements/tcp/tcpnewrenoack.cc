@@ -35,7 +35,6 @@
 #include "tcpstate.hh"
 #include "tcpinfo.hh"
 #include "util.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 TCPNewRenoAck::TCPNewRenoAck()

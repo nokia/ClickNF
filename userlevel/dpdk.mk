@@ -214,7 +214,6 @@ CXXFLAGS := $(CXXFLAGS) $(CFLAGS) $(EXTRA_CFLAGS)
 include $(RTE_SDK)/mk/internal/rte.build-pre.mk
 
 LDFLAGS += $(EXTRA_LDFLAGS)
-
 # 'override' messes linking to other libs (e.g., boost) and seems unnecessary
 #override LDFLAGS := $(call linkerprefix,$(LDFLAGS))
 LDFLAGS := $(call linkerprefix,$(LDFLAGS))

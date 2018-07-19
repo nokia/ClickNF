@@ -28,9 +28,9 @@
 #include <click/args.hh>
 #include <click/error.hh>
 #include <click/router.hh>
+#include <click/tcpanno.hh>
 #include "tcpsetmssanno.hh"
 #include "tcpstate.hh"
-#include "tcpanno.hh"
 CLICK_DECLS
 
 TCPSetMssAnno::TCPSetMssAnno() : _mss(0)

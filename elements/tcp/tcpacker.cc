@@ -28,7 +28,6 @@
 #include <clicknet/tcp.h>
 #include "tcpacker.hh"
 #include "tcpstate.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 TCPAcker::TCPAcker()

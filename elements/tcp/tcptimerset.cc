@@ -27,8 +27,8 @@
 #include <click/task.hh>
 #include <click/routerthread.hh>
 #include <click/master.hh>
+#include <clicknet/tcp.hh>
 #include "tcptimerset.hh"
-#include "tcp.hh"
 #include "util.hh"
 CLICK_DECLS
 

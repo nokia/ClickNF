@@ -19,6 +19,7 @@
 # include <click/vector.hh>
 # include <rte_mbuf.h>
 # include <rte_memcpy.h>
+# include <rte_ip.h>
 # define HAVE_DPDK_PACKET 1
 #elif (CLICK_USERLEVEL || CLICK_NS || CLICK_MINIOS) && (!HAVE_MULTITHREAD || HAVE___THREAD_STORAGE_CLASS)
 # define HAVE_CLICK_PACKET_POOL 1
@@ -118,8 +119,12 @@ class Packet { public:
     struct mbuf *dup_jumbo_m(struct mbuf *mbuf);
 #elif CLICK_USERLEVEL || CLICK_MINIOS
 #if HAVE_DPDK_PACKET
-	struct rte_mbuf *mbuf() { return (struct rte_mbuf *)this; }
-	const struct rte_mbuf *mbuf() const { return (const struct rte_mbuf*)this; }
+
+    static WritablePacket * mbuf2packet(struct rte_mbuf *m);
+    struct rte_mbuf * packet2mbuf(bool tx_ip_checksum, bool tx_tcp_checksum, bool tx_udp_checksum, bool tx_tcp_tso);
+    void destroy(unsigned char *, size_t, void *buf);       
+    struct rte_mbuf *mbuf() { return (struct rte_mbuf *)this; }
+    const struct rte_mbuf *mbuf() const { return (const struct rte_mbuf*)this; }
 
     void reset() {
 	assert(!shared());
@@ -1760,6 +1765,7 @@ Packet::kill()
 # endif
     skbmgr_recycle_skbs(b);
 #elif HAVE_DPDK_PACKET
+    clear_annotations();
     rte_pktmbuf_free(mbuf());
 #elif HAVE_CLICK_PACKET_POOL
     if (_use_count.dec_and_test())

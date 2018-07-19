@@ -31,7 +31,7 @@
 #if HAVE_OPENSSL
 # include <openssl/err.h>
 #endif
-#include "elements/tcp/tcpanno.hh"
+#include <click/tcpanno.hh>
 #include "elements/tcp/tcpinfo.hh"
 #include "sslserver.hh"
 CLICK_DECLS

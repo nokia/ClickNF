@@ -28,7 +28,6 @@
 #include <clicknet/tcp.h>
 #include "tcprstencap.hh"
 #include "tcpstate.hh"
-#include "tcp.hh"
 CLICK_DECLS
 
 TCPRstEncap::TCPRstEncap()
