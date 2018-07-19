@@ -36,7 +36,7 @@ class TCPBulkClient final : public TCPApplication { public:
 
 	const char *class_name() const { return "TCPBulkClient"; }
 	const char *port_count() const { return "1/1-2"; }
-	const char *processing() const { return "l/h"; }
+	const char *processing() const { return "h/h"; }
 
 	int configure(Vector<String> &, ErrorHandler *) CLICK_COLD;
 	int initialize(ErrorHandler *) CLICK_COLD;

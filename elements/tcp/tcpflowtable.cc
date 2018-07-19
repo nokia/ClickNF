@@ -34,25 +34,20 @@ TCPFlowTable::TCPFlowTable()
 {
 }
 
-TCPFlowTable::TCPFlowTable(const TCPFlowTable& a) : Element()
+TCPFlowTable::TCPFlowTable(const TCPFlowTable& a)
 { 
 	// Copy constructor for empty HashContainer only
 	assert(a._flowTable.size() == 0);
 }
 
 int
-TCPFlowTable::configure(Vector<String> &conf, ErrorHandler *errh)
+TCPFlowTable::configure(unsigned int _buckets)
 {
 	size_t buckets = TCP_FLOW_BUCKETS;
 
-	if (Args(conf, this, errh)
-		.read("BUCKETS", buckets)
-		.consume() < 0)
-		return -1;
+	if (_buckets)
+		buckets = _buckets;
 
-	if (buckets == 0)
-		return errh->error("BUCKETS must be positive");
-	
 	_flowTable.rehash(buckets);
 
     return 0;
@@ -91,11 +86,5 @@ TCPFlowTable::h_flow(int, String &s, Element *e,
 	return 0;
 }
 
-void
-TCPFlowTable::add_handlers()
-{
-	set_handler("flow_table", Handler::f_read | Handler::f_read_param, h_flow);
-}
-
 CLICK_ENDDECLS
-EXPORT_ELEMENT(TCPFlowTable)
+ELEMENT_PROVIDES(TCPFlowTable)

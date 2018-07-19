@@ -82,6 +82,7 @@ class TCPInfo final : public Element { public:
 
 	// Port
 	typedef TCPPortTable* PortTable;
+	static inline void port_add(const IPAddress &a);
 	static inline bool port_get(const IPAddress &a, uint16_t p, TCPState *s);
 	static inline void port_put(const IPAddress &a, uint16_t p);
 	static inline bool port_lookup(const IPAddress &a, uint16_t p);
@@ -243,6 +244,13 @@ TCPInfo::port_lookup(const IPAddress &addr, uint16_t port)
 {
 	unsigned c = click_current_cpu_id();
 	return _portTable[c].lookup(addr, port);
+}
+
+inline void
+TCPInfo::port_add(const IPAddress &addr)
+{
+	unsigned c = click_current_cpu_id();
+	_portTable[c].add(addr);
 }
 
 inline void

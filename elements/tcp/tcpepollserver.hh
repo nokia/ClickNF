@@ -30,9 +30,9 @@
 #include "blockingtask.hh"
 CLICK_DECLS
 
-#define TCP_EPOLL_SERVER__IN_NET_PORT 0 // Port 0: Network -> Application
+#define TCP_EPOLL_SERVER_IN_NET_PORT 0 // Port 0: Network -> Application
 #define TCP_EPOLL_SERVER_OUT_APP_PORT 0
-#define TCP_EPOLL_SERVER__IN_APP_PORT 1 // Port 1: Application -> Network
+#define TCP_EPOLL_SERVER_IN_APP_PORT 1 // Port 1: Application -> Network
 #define TCP_EPOLL_SERVER_OUT_NET_PORT 1
 
 class TCPEpollServer final : public TCPApplication { public:
@@ -41,7 +41,7 @@ class TCPEpollServer final : public TCPApplication { public:
 
 	const char *class_name() const { return "TCPEpollServer"; }
 	const char *port_count() const { return "2/2"; }
-	const char *processing() const { return "lh/h"; }
+	const char *processing() const { return "hh/hh"; }
 
 	int configure(Vector<String> &, ErrorHandler *) CLICK_COLD;
 	int initialize(ErrorHandler *) CLICK_COLD;

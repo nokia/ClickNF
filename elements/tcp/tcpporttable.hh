@@ -33,19 +33,19 @@
 #include "tcpstate.hh"
 CLICK_DECLS
 
-class TCPPortTable final : public Element { public:
+class TCPPortTable final { public:
 
-	TCPPortTable() CLICK_COLD;
+	TCPPortTable();
 	TCPPortTable(const TCPPortTable& a);
 	
 	const char *class_name() const	{ return "TCPPortTable"; }
 
-	int configure(Vector<String> &, ErrorHandler *) CLICK_COLD;
-	void add_handlers() CLICK_COLD;
+	int configure(Vector<IPAddress>);
 
 	typedef Vector<TCPState *> PortVector;
 	typedef HashTable<IPAddress, PortVector> PortTable;
 
+	inline void add(const IPAddress &addr);
 	inline bool get(const IPAddress &addr, uint16_t port, TCPState *s);
 	inline void put(const IPAddress &addr, uint16_t port);
 	inline bool lookup(const IPAddress &addr, uint16_t port);
@@ -73,6 +73,14 @@ TCPPortTable::get(const IPAddress &addr, uint16_t port, TCPState *s)
 
 	return false;
 }
+
+
+inline void
+TCPPortTable::add(const IPAddress &addr)
+{
+	_portTable.find_insert(addr, PortVector(65536, NULL));
+}
+
 
 inline void
 TCPPortTable::put(const IPAddress &addr, uint16_t port)

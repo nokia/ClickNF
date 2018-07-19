@@ -1,8 +1,8 @@
 /*
- * tcpbulkserver.{cc,hh} -- a bulk transfer server over TCP using zero copy API
- * Rafael Laufer
+ * socks4proxy.{cc,hh} -- a simple implementation of modular socks proxy
+ * Massimo Gallo
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2018 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -23,35 +23,59 @@
  *
  */
 
-#ifndef CLICK_TCPBULKSERVER_HH
-#define CLICK_TCPBULKSERVER_HH
+#ifndef CLICK_SOCKS4PROXY_HH
+#define CLICK_ECHOSERVER_HH
 #include <click/element.hh>
-#include "tcpapplication.hh"
-#include "blockingtask.hh"
+#include <click/tcpanno.hh>
+#include "../tcp/tcpapplication.hh"
 CLICK_DECLS
 
-class TCPBulkServer final : public TCPApplication { public:
+#define SOCKS4PROXY_IN_SRV_PORT 0   // Port 0-in:  EpollServer -> Proxy
+#define SOCKS4PROXY_OUT_SRV_PORT 0  // Port 0-out: Proxy       -> EpollServer
+#define SOCKS4PROXY_IN_CLI_PORT 1   // Port 1-in:  EpollClient -> Proxy
+#define SOCKS4PROXY_OUT_CLI_PORT 1  // Port 1-out: Proxy       -> EpollClient
 
-	TCPBulkServer() CLICK_COLD;
+// Connection status
+enum status_t {
+	S_CLOSED,
+	S_LISTENING,
+	S_CONNECTING,
+	S_ESTABLISHED,
+};
 
-	const char *class_name() const { return "TCPBulkServer"; }
-	const char *port_count() const { return "1/1-2"; }
-	const char *processing() const { return "h/h"; }
+class Socks4Proxy :  public TCPApplication {  public:
+
+	Socks4Proxy() CLICK_COLD;
+
+	const char *class_name() const { return "Socks4Proxy"; }
+	const char *port_count() const { return "2/2"; }
+	const char *processing() const { return PUSH; }
 
 	int configure(Vector<String> &, ErrorHandler *) CLICK_COLD;
 	int initialize(ErrorHandler *) CLICK_COLD;
 
-	void push(int, Packet *) final;
-	bool run_task(Task *);
+	void push(int, Packet *);
+	
+	struct Socket {
+		Socket()
+			: pair(-1), status(S_CLOSED) { }
+		Socket(int pair_, int status_)
+			: pair(pair_), status(status_) { }
 
-  private:
+		int pair;
+		int status;
+		Packet *p;
+	};
+	
+	typedef	Vector<struct Socket> SocketTable;
 
-	BlockingTask _task;
-	IPAddress _addr;
-	uint16_t _port;
-	uint64_t _length;
-	uint32_t _buflen;
-	uint32_t _batch;
+      protected:
+
+	void socket_remove(uint16_t core, int fd);
+	void socket_insert(uint16_t core, int fd, int pair_fd, int status);
+	
+	Vector<SocketTable> _socketTable; 
+	unsigned int _nthreads;
 	bool _verbose;
 };
 

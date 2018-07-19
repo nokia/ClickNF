@@ -1,8 +1,8 @@
 /*
- * tcpbulkserver.{cc,hh} -- a bulk transfer server over TCP using zero copy API
- * Rafael Laufer
+ * tcpepollclient.{cc,hh} -- a TCP client using epoll_wait()
+ * Massimo Gallo
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2018 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -23,36 +23,51 @@
  *
  */
 
-#ifndef CLICK_TCPBULKSERVER_HH
-#define CLICK_TCPBULKSERVER_HH
+
+#ifndef CLICK_TCPEPOLLCLIENT_HH
+#define CLICK_TCPEPOLLCLIENT_HH
 #include <click/element.hh>
 #include "tcpapplication.hh"
 #include "blockingtask.hh"
 CLICK_DECLS
 
-class TCPBulkServer final : public TCPApplication { public:
+#define TCP_EPOLL_CLIENT_IN_NET_PORT 0 // Port 0: Network -> Application
+#define TCP_EPOLL_CLIENT_OUT_APP_PORT 0
+#define TCP_EPOLL_CLIENT_IN_APP_PORT 1 // Port 1: Application -> Network
+#define TCP_EPOLL_CLIENT_OUT_NET_PORT 1
 
-	TCPBulkServer() CLICK_COLD;
+class TCPEpollClient final : public TCPApplication { public:
 
-	const char *class_name() const { return "TCPBulkServer"; }
-	const char *port_count() const { return "1/1-2"; }
-	const char *processing() const { return "h/h"; }
+	TCPEpollClient() CLICK_COLD;
+
+	const char *class_name() const { return "TCPEpollClient"; }
+	const char *port_count() const { return "2/2"; }
+	const char *processing() const { return "hh/hh"; }
 
 	int configure(Vector<String> &, ErrorHandler *) CLICK_COLD;
 	int initialize(ErrorHandler *) CLICK_COLD;
 
-	void push(int, Packet *) final;
+	struct ThreadData {
+		int epfd;
+		int lfd;
+		BlockingTask *task;
+
+		ThreadData() : epfd(-1), lfd(-1), task(NULL) { }
+	} CLICK_ALIGNED(CLICK_CACHE_LINE_SIZE);
+	
 	bool run_task(Task *);
+	void selected(int, int);
+	void push(int, Packet *) final;
 
   private:
 
-	BlockingTask _task;
+	bool _verbose;
 	IPAddress _addr;
 	uint16_t _port;
-	uint64_t _length;
-	uint32_t _buflen;
 	uint32_t _batch;
-	bool _verbose;
+	ThreadData *_thread;
+	uint16_t _nthreads;
+
 };
 
 CLICK_ENDDECLS

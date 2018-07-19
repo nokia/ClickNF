@@ -202,7 +202,16 @@ class TCPState { public:
 #endif
 	uint16_t  snd_rtx_count;             // number of retx for the HOL packet
 
-	char padding[10];
+	uint8_t  bind_address_no_port:1,     // disable port binding when port = 0 
+	         unused4:1,  
+	         unused5:1,  
+	         unused6:1,  
+	         unused7:1,
+	         unused8:1,
+		 unused9:1,
+	         unused10:1;
+
+	char padding[9];
 	TCPTimer rtx_timer; //CLICK_ALIGNED(CLICK_CACHE_LINE_SIZE);
 #if HAVE_TCP_KEEPALIVE
 	TCPTimer keepalive_timer; //CLICK_ALIGNED(CLICK_CACHE_LINE_SIZE);

@@ -30,6 +30,8 @@
 #include <click/ipaddress.hh>
 #include "tcpstate.hh"
 #include <bits/socket.h>
+#include <stdarg.h>
+
 
 #if HAVE_DPDK
 #include <rte_byteorder.h>
@@ -97,7 +99,7 @@ class TCPSocket final : public Element { public:
 
 	const char *class_name() const { return "TCPSocket"; }
 	const char *port_count() const { return "1/5"; }
-	const char *processing() const { return "h/hhhhl"; }
+	const char *processing() const { return "h/hhhhh"; }
 
 	int configure(Vector<String> &, ErrorHandler *);
 
@@ -107,6 +109,8 @@ class TCPSocket final : public Element { public:
 
 	// Socket API
 	static int socket(int pid, int domain, int type, int protocol);
+	static int fcntl(int pid, int sockfd, int cmd, int arg);
+	static int fcntl(int pid, int sockfd, int cmd);
 	static int bind(int pid, int sockfd, IPAddress &addr, uint16_t &port);
 	static int listen(int pid, int sockfd, int backlog);
 	static int accept(int pid, int sockfd, IPAddress &addr, uint16_t &port);
@@ -121,6 +125,9 @@ class TCPSocket final : public Element { public:
 	// Zero-copy API
 	static void push(int pid, int sockfd, Packet *p);
 	static Packet *pull(int pid, int sockfd, int npkts = 1);
+	
+	//State modifications
+	static int set_task(int pid, int sockfd, BlockingTask * t);
 
 #if HAVE_DPDK
 	//RSS API
@@ -140,7 +147,7 @@ class TCPSocket final : public Element { public:
 #endif
 
   private:
-	static int __bind(TCPState *s, IPAddress &addr, uint16_t &port);
+	static int __bind(TCPState *s, IPAddress &addr, uint16_t &port, bool bind_address_no_port);
 
 	// Handlers
 	static int h_socket(int, String&, Element*, const Handler*, ErrorHandler*);

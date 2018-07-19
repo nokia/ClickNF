@@ -98,10 +98,10 @@ TCPInfo::configure(Vector<String> &conf, ErrorHandler *errh)
 	_epollTable = new TCPTable<TCPEventQueue *>[_nthreads];
 #endif
 	for (unsigned int c = 0; c < _nthreads ; c++){
-		if (int r =_flowTable[c].configure(conf, errh))
+		if (int r =_flowTable[c].configure(_buckets))
 			return r;
 
-		if (int r = _portTable[c].configure(conf, errh))
+		if (int r = _portTable[c].configure(_addr))
 			return r;
 		_sockTable[c] = TCPSockTable(MAX_PIDS, TCP_USR_CAPACITY, NULL);
 		_sockFDesc[c] = TCPFDesc(MAX_PIDS, TCP_USR_CAPACITY, -1, 3);

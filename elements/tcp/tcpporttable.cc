@@ -35,25 +35,23 @@ TCPPortTable::TCPPortTable()
 }
 
 TCPPortTable::TCPPortTable(const TCPPortTable& a)
-	: Element(), _portTable(a._portTable)
+	: _portTable(a._portTable)
 { 
 }
 
 int
-TCPPortTable::configure(Vector<String> &conf, ErrorHandler *errh)
+TCPPortTable::configure(Vector<IPAddress> addr)
 {
-	Vector<IPAddress> addr;
 	size_t buckets = TCP_FLOW_BUCKETS;
 
-	if (Args(conf, this, errh)
-		.read_mp("ADDRS", addr)
-		.consume() < 0)
-		return -1;
-
-	if (addr.empty())
-		return errh->error("ADDRS must be given at least one IP address");
-	if (buckets == 0)
-		return errh->error("BUCKETS must be positive");
+	if (addr.empty()){
+		click_chatter("ADDRS must be given at least one IP address");
+		exit(0);
+	}
+	if (buckets == 0){
+		click_chatter("BUCKETS must be positive");
+		exit(0);
+	}
 	
 	_portTable.rehash(buckets);
 
@@ -93,12 +91,6 @@ TCPPortTable::h_port(int, String &s, Element *e, const Handler*, ErrorHandler* e
 	return 0;
 }
 
-void
-TCPPortTable::add_handlers()
-{
-	set_handler("port_table", Handler::f_read | Handler::f_read_param, h_port);
-}
-
 
 CLICK_ENDDECLS
-EXPORT_ELEMENT(TCPPortTable)
+ELEMENT_PROVIDES(TCPPortTable)

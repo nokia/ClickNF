@@ -126,6 +126,83 @@ TCPSocket::socket(int pid, int domain, int type, int protocol)
 }
 
 int
+TCPSocket::fcntl(int pid, int sockfd, int cmd)
+{
+	// Check if pid exists
+	if (unlikely(!TCPInfo::pid_valid(pid))) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	// Get state
+	TCPState *s = TCPInfo::sock_lookup(pid, sockfd);
+
+	// Check if sockfd exists
+	if (unlikely(!s)) {
+		errno = EBADF;
+		return -1;
+	}
+	
+	switch (cmd) {
+		case F_GETFL:
+			return s->flags; 
+			break;
+	}
+	return 0;
+  
+}
+
+int
+TCPSocket::set_task(int pid, int sockfd, BlockingTask * t)
+{
+	// Check if pid exists
+	if (unlikely(!TCPInfo::pid_valid(pid))) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	// Get state
+	TCPState *s = TCPInfo::sock_lookup(pid, sockfd);
+
+	// Check if sockfd exists
+	if (unlikely(!s)) {
+		errno = EBADF;
+		return -1;
+	}
+	
+	//Override
+	s->task = t;
+}
+
+int
+TCPSocket::fcntl(int pid, int sockfd, int cmd, int arg)
+{
+	
+	// Check if pid exists
+	if (unlikely(!TCPInfo::pid_valid(pid))) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	// Get state
+	TCPState *s = TCPInfo::sock_lookup(pid, sockfd);
+
+	// Check if sockfd exists
+	if (unlikely(!s)) {
+		errno = EBADF;
+		return -1;
+	}
+	
+	switch (cmd) {
+		case F_SETFL:
+			s->flags = arg;
+			return 1;
+			break;
+	}
+	return 0;
+}
+
+int
 TCPSocket::setsockopt(int pid, int sockfd, int level, int optname, const void *optval, socklen_t optlen)
 {
 #if CLICK_STATS >= 2
@@ -188,6 +265,17 @@ TCPSocket::setsockopt(int pid, int sockfd, int level, int optname, const void *o
 
 			snd_mss = (uint16_t*) optval;
 			s->snd_mss = MIN(*snd_mss, TCP_SND_MSS_MAX);
+			break;
+
+		default:
+			errno = EOPNOTSUPP;
+			return -1;
+		}
+	}
+	else if ( level == SOL_IP ){
+		switch (optname) {
+		case IP_BIND_ADDRESS_NO_PORT:
+			s->bind_address_no_port = true;
 			break;
 
 		default:
@@ -395,7 +483,7 @@ TCPSocket::bind(int pid, int sockfd, IPAddress &addr, uint16_t &port)
 	}
 
 	// Address/port binding
-	int r = __bind(s, addr, port);
+	int r = __bind(s, addr, port, s->bind_address_no_port);
 
 #if CLICK_STATS >= 2
 	delta = click_get_cycles() - start_cycles;
@@ -406,7 +494,7 @@ TCPSocket::bind(int pid, int sockfd, IPAddress &addr, uint16_t &port)
 }
 
 int
-TCPSocket::__bind(TCPState *s, IPAddress &addr, uint16_t &port)
+TCPSocket::__bind(TCPState *s, IPAddress &addr, uint16_t &port, bool bind_address_no_port)
 {
 	// Check if socket is already bound to an address/port
 	if (unlikely(s->bound())) {
@@ -415,17 +503,27 @@ TCPSocket::__bind(TCPState *s, IPAddress &addr, uint16_t &port)
 	}
 	click_assert(s->flow.saddr().empty() && s->flow.sport() == 0);
 
-	// Only accept requests for our IP addresses or 0.0.0.0
-	Vector<IPAddress> my_addrs = TCPInfo::addr();
-	if (unlikely(addr.empty()))
-		addr = my_addrs[0];
-	else if (find(my_addrs.begin(), my_addrs.end(), addr) == my_addrs.end()) {
-		errno = EADDRNOTAVAIL;
-		return -1;
-	}
+	//Allow any address to be added. Do not check fo the address
+	
+// 	// Only accept requests for our IP addresses or 0.0.0.0
+// 	Vector<IPAddress> my_addrs = TCPInfo::addr();
+// 	if (unlikely(addr.empty()))
+// 		addr = my_addrs[0];
+// 	else if (find(my_addrs.begin(), my_addrs.end(), addr) == my_addrs.end()) {
+// 		errno = EADDRNOTAVAIL;
+// 		return -1;
+// 	}
+	
 
-	// If port is not specified, try to bind to an ephemeral port
-	if (port == 0) {
+
+	// If port is not specified (and bind_address_no_port, try to bind to an ephemeral por
+	if (port != 0){
+		if (!TCPInfo::port_get(addr, port, s)) {
+			      errno = EADDRINUSE;
+			      return -1;
+		      }
+	}
+	else if (!bind_address_no_port) {
 		// Select a random source port
 		uint16_t start = (uint16_t)click_random(1024, 65535);
 		uint16_t p = start;
@@ -659,24 +757,28 @@ TCPSocket::connect(int pid, int sockfd, IPAddress daddr, uint16_t dport)
 	}
 
 	// Bind to a local interface and port, if needed
+	IPFlowID flow;
 	IPAddress saddr(0);
 	uint16_t sport = 0;
 	if (s->flow.saddr().empty()) {
 		click_assert(s->flow.sport() == 0);
-#if HAVE_DPDK
-		IPFlowID flow;
 		Vector<IPAddress> my_addrs = TCPInfo::addr();
 		saddr = my_addrs[0];
-		flow.assign(saddr, htons(sport), daddr, htons(dport));
-		ret = rss_sport(flow);
-		if (ret == -1)
-			return -1; // errno is set by rss_sport()
-		sport = (uint16_t)ret;
+	}
+	else
+		saddr = s->flow.saddr();
+#if HAVE_DPDK
+	flow.assign(saddr, htons(sport), daddr, htons(dport));
+	ret = rss_sport(flow);
+	if (ret == -1)
+		return -1; // errno is set by rss_sport()
+	sport = (uint16_t)ret;
 #endif // HAVE_DPDK
-		ret = __bind(s, saddr, sport);
-		if (ret) {
-			return -1; // errno is set by bind()
-		}
+	
+	//Bind asking for rnd port if sport = 0
+	ret = __bind(s, saddr, sport, false);
+	if (ret) {
+		return -1; // errno is set by bind()
 	}
 
 	// Complete flow tuple
@@ -996,7 +1098,6 @@ TCPSocket::push(int pid, int sockfd, Packet *p)
 		Packet *q = p->next();
  		if (p->timestamp_anno() > 0)
  			p->set_timestamp_anno(Timestamp());
-
 		s->txq.push_back(p);
 		p = q;
 	} while (p);

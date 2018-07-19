@@ -32,15 +32,14 @@
 #include "tcpstate.hh"
 CLICK_DECLS
 
-class TCPFlowTable final : public Element { public:
+class TCPFlowTable final { public:
 
 	TCPFlowTable() CLICK_COLD;
 	TCPFlowTable(const TCPFlowTable& a);
 	
 	const char *class_name() const { return "TCPFlowTable"; }
 
-	int configure(Vector<String> &, ErrorHandler *) CLICK_COLD;
-	void add_handlers() CLICK_COLD;
+	int configure(unsigned int) ;
 
 	inline TCPState *lookup(const IPFlowID &flow);
 	inline int insert(TCPState *s);

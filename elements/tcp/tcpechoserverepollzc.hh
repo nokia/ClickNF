@@ -37,7 +37,7 @@ class TCPEchoServerEpollZC final : public TCPApplication { public:
 
 	const char *class_name() const { return "TCPEchoServerEpollZC"; }
 	const char *port_count() const { return "1/1"; }
-	const char *processing() const { return "l/h"; }
+	const char *processing() const { return "h/h"; }
 
 	int configure(Vector<String> &, ErrorHandler *) CLICK_COLD;
 	int initialize(ErrorHandler *) CLICK_COLD;

@@ -38,6 +38,8 @@ class TCPApplication : public Element { public:
 
 	// Socket API
 	inline int click_socket(int domain, int type, int protocol);
+	inline int click_fcntl(int sockfd, int cmd, int arg);
+	inline int click_fcntl(int sockfd, int cmd);
 	inline int click_bind(int sockfd, IPAddress &addr, uint16_t &port);
 	inline int click_setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
 	inline int click_getsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
@@ -52,6 +54,10 @@ class TCPApplication : public Element { public:
 	// Zero-copy (ZC) API
 	inline void click_push(int sockfd, Packet *p);
 	inline Packet *click_pull(int sockfd, int npkts = 1);
+	
+	//State modifications
+	inline void click_set_task(int sockfd, BlockingTask * t);
+
 
 #if HAVE_DPDK
 	//RSS API
@@ -85,6 +91,16 @@ inline int
 TCPApplication::click_socket(int domain, int type, int protocol)
 {
 	return TCPSocket::socket(_pid, domain, type, protocol);
+}
+
+inline int 
+TCPApplication::click_fcntl( int sockfd, int cmd,  int arg){
+	return TCPSocket::fcntl(_pid, sockfd, cmd, arg);
+}
+
+inline int 
+TCPApplication::click_fcntl( int sockfd, int cmd){
+	return TCPSocket::fcntl(_pid, sockfd, cmd);
 }
 
 inline int
@@ -158,6 +174,13 @@ TCPApplication::click_pull(int sockfd, int npkts)
 {
 	return TCPSocket::pull(_pid, sockfd, npkts);
 }
+
+inline void 
+TCPApplication::click_set_task(int sockfd, BlockingTask * t)
+{
+	TCPSocket::set_task(_pid, sockfd, t);
+}
+
 
 #if HAVE_ALLOW_POLL
 inline int

@@ -1,8 +1,8 @@
 /*
- * tcpepollserver.{cc,hh} -- a generic TCP server using epoll_wait()
- * Rafael Laufer, Massimo Gallo
+ * tcpepollclient.{cc,hh} -- a TCP client using epoll_wait()
+ * Massimo Gallo
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2018 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -35,17 +35,17 @@
 #include <click/master.hh>
 #include <click/standard/scheduleinfo.hh>
 #include "tcpsocket.hh"
-#include "tcpepollserver.hh"
+#include "tcpepollclient.hh"
 #include "util.hh"
 CLICK_DECLS
 
-TCPEpollServer::TCPEpollServer()
+TCPEpollClient::TCPEpollClient()
 	: _verbose(false), _batch(1)
 {
 }
 
 int
-TCPEpollServer::configure(Vector<String> &conf, ErrorHandler *errh)
+TCPEpollClient::configure(Vector<String> &conf, ErrorHandler *errh)
 {
 	if (Args(conf, this, errh)
 		.read_mp("ADDRESS", _addr)
@@ -55,12 +55,14 @@ TCPEpollServer::configure(Vector<String> &conf, ErrorHandler *errh)
 		.read("PID", _pid)
 		.complete() < 0)
 		return -1;
+
+	_batch = 1; //Batch is forced to 1. Batches no yet implemented at app level. 
 	
 	return 0;
 }
 
 int
-TCPEpollServer::initialize(ErrorHandler *errh)
+TCPEpollClient::initialize(ErrorHandler *errh)
 {
 	int r = TCPApplication::initialize(errh);
 	if (r < 0)
@@ -86,59 +88,21 @@ TCPEpollServer::initialize(ErrorHandler *errh)
 
 
 bool
-TCPEpollServer::run_task(Task *)
+TCPEpollClient::run_task(Task *)
 {
 	unsigned c = click_current_cpu_id();
 	ThreadData *t = &_thread[c];
 	
-	// Socket
-	t->lfd = click_socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-	if (t->lfd < 0) {
-		perror("socket");
-		return false;
-	}
-	if (_verbose)
-		click_chatter("%s: listen sockfd %d", class_name(), t->lfd);
-
-	// Bind
-	if (click_bind(t->lfd, _addr, _port) < 0) {
-		perror("bind");
-		return false;
-	}
-	if (_verbose)
-		click_chatter("%s: bounded to %s, port %d", \
-		                          class_name(), _addr.unparse().c_str(), _port);
-
-	// Listen
-	if (click_listen(t->lfd, 8192) < 0) {
-		perror("listen");
-		return false;
-	}
-	if (_verbose)
-		click_chatter("%s: listening at %s, port %u", \
-		                          class_name(), _addr.unparse().c_str(), _port);
-
 	// Create epollfd 
 	t->epfd = click_epoll_create(1);
 	if (t->epfd < 0) {
 		perror("epoll_create");
 		return false;
 	}
-	
+
 	if (_verbose)
 		click_chatter("%s: created epoll fd %d", class_name(), t->epfd);
-
-	// Create epoll event
-	struct epoll_event ev;
-	ev.events = EPOLLIN;
-	ev.data.fd = t->lfd;
-        
-	// Add listener file descriptor to the epollfd list
-	if (click_epoll_ctl(t->epfd, EPOLL_CTL_ADD, t->lfd, &ev) < 0) {
-		perror("epoll_ctl");
-		return false;
-	}
-
+		
 	int MAXevents = 4096;
 	struct epoll_event events[MAXevents];
 
@@ -161,8 +125,6 @@ TCPEpollServer::run_task(Task *)
 			break;
 	}
 
-	// Remove listener from the list of watched file descriptors
-	click_epoll_ctl(t->epfd, EPOLL_CTL_DEL, t->lfd, NULL);
 	click_epoll_close(t->epfd);
 
 	if (_verbose)
@@ -174,69 +136,57 @@ TCPEpollServer::run_task(Task *)
 }
 
 void
-TCPEpollServer::selected(int sockfd, int revents)
+TCPEpollClient::selected(int sockfd, int revents)
 {
 	unsigned c = click_current_cpu_id();
-	ThreadData *t = &_thread[c];
-	
+	ThreadData *t = &_thread[c];	
+
+	// Check for output events
+	if (revents & EPOLLOUT) {
+		//Signal connection established. 
+		if (_verbose)
+			click_chatter("%s: connected %d", class_name(), sockfd);
+  
+		Packet* p = Packet::make((const void *)NULL, 0);
+		SET_TCP_SOCK_OUT_FLAG_ANNO(p);
+		SET_TCP_SOCKFD_ANNO(p, sockfd);
+		output(TCP_EPOLL_CLIENT_OUT_APP_PORT).push(p);
+		
+		// Modify sockfd from epoll, registrer 
+		struct epoll_event ev;
+		ev.events = EPOLLIN; //Register in for incoming events only
+		ev.data.fd = sockfd;
+		
+		if (click_epoll_ctl(t->epfd, EPOLL_CTL_MOD, sockfd, &ev) < 0)
+			perror("epoll_ctl");
+	}
+
+	// Check for input events
 	if (revents & EPOLLIN) {
-		// Handle new and already established connections
-		if (sockfd == t->lfd) {
-			// Accept the connection
-			IPAddress addr;
-			uint16_t port = 0;
-			
-			int newfd = click_accept(t->lfd, addr, port);
-			if (newfd == -1) {
-				perror("accept");
-				return;
-			}
+		// Incoming data from socket in epoll
+		if (_verbose)
+			click_chatter("%s: event on sockfd = %d", class_name(), sockfd);
 
-			struct epoll_event ev;
-			ev.events = EPOLLIN;
-			ev.data.fd = newfd;
+		Packet *p = click_pull(sockfd, _batch);
+		if (!p) {
+			perror("pull");
 
-			if (click_epoll_ctl(t->epfd, EPOLL_CTL_ADD, newfd, &ev) < 0) {
+			if (click_epoll_ctl(t->epfd, EPOLL_CTL_DEL, sockfd, NULL) < 0)
 				perror("epoll_ctl");
-				click_close(newfd);
-				return;
-			}
 
-			if (_verbose)
-				click_chatter("%s: accepted fd %d from %s port %u",
-				             class_name(), newfd, addr.unparse().c_str(), port);
-
-			Packet *p = Packet::make((const void *)NULL, 0);
-			SET_TCP_SOCKFD_ANNO(p, newfd);
-			SET_TCP_SOCK_ADD_FLAG_ANNO(p);
-			output(TCP_EPOLL_SERVER_OUT_APP_PORT).push(p);
+			click_close(sockfd);
+			p = Packet::make((const void *)NULL, 0);
+			SET_TCP_SOCK_DEL_FLAG_ANNO(p);
 		}
-		else {
-			if (_verbose)
-				click_chatter("%s: event on sockfd = %d", class_name(), sockfd);
+		else if (!p->length()) {
+			if (click_epoll_ctl(t->epfd, EPOLL_CTL_DEL, sockfd, NULL) < 0)
+				perror("epoll_ctl");
 
-			Packet *p = click_pull(sockfd, _batch);
-			if (!p) {
-				perror("pull");
-
-				if (click_epoll_ctl(t->epfd, EPOLL_CTL_DEL, sockfd, NULL) < 0)
-					perror("epoll_ctl");
-
-				click_close(sockfd);
-				p = Packet::make((const void *)NULL, 0);
-				SET_TCP_SOCK_DEL_FLAG_ANNO(p);
-			}
-			else if (!p->length()) {
-				if (click_epoll_ctl(t->epfd, EPOLL_CTL_DEL, sockfd, NULL) < 0)
-					perror("epoll_ctl");
-
-				click_close(sockfd);
-				SET_TCP_SOCK_DEL_FLAG_ANNO(p);
-			}
-			
-			SET_TCP_SOCKFD_ANNO(p, sockfd);
-			output(TCP_EPOLL_SERVER_OUT_APP_PORT).push(p);
+			click_close(sockfd);
+			SET_TCP_SOCK_DEL_FLAG_ANNO(p);
 		}
+		SET_TCP_SOCKFD_ANNO(p, sockfd);
+		output(TCP_EPOLL_CLIENT_OUT_APP_PORT).push(p);
 	}
 
 	// Check for errors
@@ -255,27 +205,77 @@ TCPEpollServer::selected(int sockfd, int revents)
 		Packet *p = Packet::make((const void *)NULL, 0);
 		SET_TCP_SOCKFD_ANNO(p, sockfd);
 		SET_TCP_SOCK_DEL_FLAG_ANNO(p);
-		output(TCP_EPOLL_SERVER_OUT_APP_PORT).push(p);
+		output(TCP_EPOLL_CLIENT_OUT_APP_PORT).push(p);
 	}
 }
 
 void
-TCPEpollServer::push(int port, Packet *p)
+TCPEpollClient::push(int port, Packet *p)
 {
 	unsigned c = click_current_cpu_id();
 	ThreadData *t = &_thread[c];
 	
-	//TODO treat packets in batch
-	int sockfd = TCP_SOCKFD_ANNO(p);
+	int sockfd = TCP_SOCKFD_ANNO(p); //socket created in the App.
 
-	if (port != TCP_EPOLL_SERVER_IN_APP_PORT) {
+	if (port != TCP_EPOLL_CLIENT_IN_APP_PORT) {
 		p->kill();
 		return;
 	}
 
 	if (TCP_SOCK_ADD_FLAG_ANNO(p)) {
+ 
+		if (_verbose)
+			click_chatter("%s: adding fd %d to clients",class_name(),sockfd);
+
+		//Add new client and connect. 
+		IPAddress daddr = p->dst_ip_anno();
+		int dport = TCP_DPORT_ANNO(p); 
+		
+		//Check if socket is non-blocking. 
+		int flags = click_fcntl(sockfd, F_GETFL);
+		if (! (flags & (SOCK_NONBLOCK))){
+			click_chatter("%s: Error, socket should always be blocking.", class_name());
+			p->kill();
+			return;
+		}
+
+		// Force outbound connections to use client's address. 
+		if (click_setsockopt(sockfd, SOL_IP, IP_BIND_ADDRESS_NO_PORT,NULL,0)){
+			perror("setsockopt");
+			return;
+		}
+
+		if (_verbose)
+			click_chatter("%s: binding fd %d to source address %s",class_name(),sockfd, _addr.unparse().c_str());
+		
+		uint16_t sport = 0;
+		if (click_bind(sockfd, _addr, sport) < 0) {
+			perror("bind");
+			p->clear_annotations();
+			SET_TCP_SOCKFD_ANNO(p, sockfd);
+			SET_TCP_SOCK_DEL_FLAG_ANNO(p);
+			output(TCP_EPOLL_CLIENT_OUT_APP_PORT).push(p);
+			return;
+		}
+
+		
+		if (_verbose)
+			click_chatter("%s: connecting fd %d to  %s",class_name(),sockfd, daddr.unparse().c_str());
+		
+		// Connect to remote address. 
+		int err = click_connect(sockfd, daddr, dport);
+		
+		if (err == -1 && errno != EINPROGRESS) {			
+			click_close(sockfd);
+			p->clear_annotations();
+			SET_TCP_SOCKFD_ANNO(p, sockfd);
+			SET_TCP_SOCK_DEL_FLAG_ANNO(p);
+			output(TCP_EPOLL_CLIENT_OUT_APP_PORT).push(p);
+			return;
+		}
+
 		struct epoll_event ev;
-		ev.events = EPOLLIN;
+		ev.events = EPOLLOUT; //Register for out (connection established) events.
 		ev.data.fd = sockfd;
 
 		if (click_epoll_ctl(t->epfd, EPOLL_CTL_ADD, sockfd, &ev) < 0) {
@@ -283,6 +283,9 @@ TCPEpollServer::push(int port, Packet *p)
 			p->kill();
 			return;
 		}
+		
+		//Force the socket to be bound to Client's Blocking Task. 
+		click_set_task(sockfd, t->task);
 
 		p->kill();
 		return;
@@ -292,15 +295,20 @@ TCPEpollServer::push(int port, Packet *p)
 			perror("epoll_ctl");
 
 		click_close(sockfd);
+
 		p->kill();
 		return;
 	}
+	
 
 	if (!p->length()){
 		p->kill();
 		return;
 	}
 
+	if (_verbose)
+		click_chatter("%s: Fwd a packet of %d bytes on established cponnection pair", class_name(), p->length());
+	
 	click_push(sockfd, p);
 
 	if (errno) {
@@ -310,5 +318,5 @@ TCPEpollServer::push(int port, Packet *p)
 }
 
 CLICK_ENDDECLS
-EXPORT_ELEMENT(TCPEpollServer)
+EXPORT_ELEMENT(TCPEpollClient)
 ELEMENT_REQUIRES(TCPApplication)
