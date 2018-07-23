@@ -32,6 +32,7 @@
 #include <click/args.hh>
 #include <click/error.hh>
 #include <click/router.hh>
+#include <click/master.hh>
 #include "socks4proxy.hh"
 CLICK_DECLS
 
