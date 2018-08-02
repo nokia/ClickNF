@@ -1,6 +1,6 @@
 /*
  * dpdk.{cc,hh} -- interface with Intel DPDK (user-level)
- * Rafael Laufer, Diego Perino, Massimo Gallo
+ * Rafael Laufer, Diego Perino, Massimo Gallo, Marco Trinelli
  *
  * Copyright (c) 2017 Nokia
  *
@@ -111,6 +111,7 @@ class DPDK : public Element { public:
 	inline static WritablePacket *make(uint32_t length);
 	String print_stats(struct rte_eth_stats stats);
 	static uint8_t key[RSS_HASH_KEY_LENGTH];
+	static bool rss_hash_enabled;
 
 	struct TaskData {
 		Task *task;

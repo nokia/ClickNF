@@ -1,6 +1,6 @@
 /*
  * tcpflowlookup.{cc,hh} -- TCP flow lookup
- * Rafael Laufer, Massimo Gallo
+ * Rafael Laufer, Massimo Gallo, Marco Trinelli
  *
  * Copyright (c) 2017 Nokia Bell Labs
  *
@@ -27,9 +27,12 @@
 #include <click/args.hh>
 #include <click/error.hh>
 #include <click/router.hh>
+#include <rte_mbuf.h>
 #include "tcpflowlookup.hh"
 #include "tcpstate.hh"
 #include "tcpinfo.hh"
+#include "../userlevel/dpdk.hh"
+
 CLICK_DECLS
 
 TCPFlowLookup::TCPFlowLookup()
@@ -41,11 +44,18 @@ TCPFlowLookup::smaction(Packet *p)
 {
 //	const click_ip *ip = p->ip_header();
 //	const click_tcp *th = p->tcp_header();
-	TCPState *s;
+    TCPState *s;
+    struct rte_mbuf *mbuf;
+    // Get flow tuple with our address as the source
+    IPFlowID flow(p, true);
 
-	// Get flow tuple with our address as the source
-	IPFlowID flow(p, true);
-
+    if (DPDK::rss_hash_enabled) {
+    // If the hash is already set in the NIC, get and set it on the flow
+    // This avoids recomputing it (see ../include/lib/ipflowid.hh)
+       mbuf = p->mbuf();
+       if (mbuf->hash.rss)
+           flow.set_hashcode(mbuf->hash.rss);
+    }
 	// If SYN packet, look for a listening socket to save a lookup. 
 	// WARNING This will cause an error if a SYN packet is received 
 	// for an ongoing connection
@@ -64,6 +74,8 @@ TCPFlowLookup::smaction(Packet *p)
 	if (!s) {
 		flow.set_daddr(IPAddress());
 		flow.set_dport(0);
+		if (DPDK::rss_hash_enabled)
+		    flow.set_hashcode(0); // to let IPFlowID compute it
 		s = TCPInfo::flow_lookup(flow);
 	}
 
