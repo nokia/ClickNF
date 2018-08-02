@@ -189,8 +189,7 @@ Socks4Proxy::push(int port, Packet *p)
 
 					//Send an empty message to open connection toward Server (using TCPEpollClient)
 					Packet* q = Packet::make((const void *)NULL, 0);
-					
-					int f; 
+ 
 					SET_TCP_SOCK_ADD_FLAG_ANNO(q);
 					SET_TCP_SOCKFD_ANNO(q, sockfd);
 					SET_TCP_DPORT_ANNO(q, port);
@@ -253,7 +252,7 @@ Socks4Proxy::push(int port, Packet *p)
 				WritablePacket *q = Packet::make(TCP_HEADROOM, NULL, 0, 8);
 				
 				char msg[8] = { 0x00, 0x5a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-				q->push(8);
+				q = q->push(8);
 				memcpy((void *)q->data(), msg, 8);
 				SET_TCP_SOCKFD_ANNO(q, _socketTable[c][fd].pair);
 				output(SOCKS4PROXY_OUT_SRV_PORT).push(q);
