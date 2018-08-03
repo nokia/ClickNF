@@ -134,7 +134,7 @@ DPDK::configure(Vector<String> &conf, ErrorHandler *errh)
 	    .read("TX_TCP_CHECKSUM", _tx_tcp_checksum)
 	    .read("TX_UDP_CHECKSUM", _tx_udp_checksum)
 	    .read("TX_TCP_TSO", _tx_tcp_tso)
-	    .read("ENABLE_RSS_HASH", DPDK::rss_hash_enabled)
+	    .read("HASH_OFFLOAD", DPDK::rss_hash_enabled)
 		.complete() < 0)
 		return -1;
 
