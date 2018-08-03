@@ -5,6 +5,8 @@
  * Copyright (c) 2014-2016 University of Liege
  * Copyright (c) 2016 Cisco Meraki
  *
+ * Updated to DPDK 18.05 by Marco Trinelli (Nokia Bell Labs)
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
  * to deal in the Software without restriction, subject to the conditions
@@ -25,8 +27,13 @@ CLICK_DECLS
  * is not well supported. This function will return 0 instead in that case. */
 int DPDKDevice::get_port_numa_node(unsigned port_id)
 {
+#if (RTE_VERSION >= RTE_VERSION_NUM(18,5,0,0))
+    if (port_id >= rte_eth_dev_count_avail())
+        return -1;
+#else
     if (port_id >= rte_eth_dev_count())
         return -1;
+#endif
     int numa_node = rte_eth_dev_socket_id(port_id);
     return (numa_node == -1) ? 0 : numa_node;
 }
@@ -251,7 +258,11 @@ int DPDKDevice::initialize(ErrorHandler *errh)
         return errh->error("Cannot probe the PCI bus");
 #endif
 
+#if (RTE_VERSION >= RTE_VERSION_NUM(18,5,0,0))
+    const unsigned n_ports = rte_eth_dev_count_avail();
+#else
     const unsigned n_ports = rte_eth_dev_count();
+#endif
     if (n_ports == 0)
         return errh->error("No DPDK-enabled ethernet port found");
 
@@ -322,9 +333,14 @@ DPDKDeviceArg::parse(const String &str, DPDKDevice* &result, const ArgContext &c
 
         port_id = DPDKDevice::get_port_from_pci(data[0],data[1],data[2],data[3]);
     }
-
+    
+#if (RTE_VERSION >= RTE_VERSION_NUM(18,5,0,0))
+    if (port_id >= 0 && port_id < rte_eth_dev_count_avail())
+        result = DPDKDevice::get_device(port_id);
+#else
     if (port_id >= 0 && port_id < rte_eth_dev_count())
         result = DPDKDevice::get_device(port_id);
+#endif
     else {
         ctx.error("Cannot resolve PCI address to DPDK device");
         return false;

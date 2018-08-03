@@ -1,8 +1,8 @@
 /*
  * dpdk.{cc,hh} -- interface with Intel DPDK (user-level)
- * Rafael Laufer, Diego Perino, Massimo Gallo
+ * Rafael Laufer, Diego Perino, Massimo Gallo, Marco Trinelli
  *
- * Copyright (c) 2017 Nokia
+ * Copyright (c) 2018 Nokia
  *
  */
 
@@ -52,7 +52,9 @@ uint8_t DPDK::key[RSS_HASH_KEY_LENGTH] = {
 	0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A
 };
 
-DPDK::DPDK() 
+bool DPDK::rss_hash_enabled = 0; // by default toeplitz hash computation is not enabled
+
+DPDK::DPDK()
 	:   _task(NULL), _nthreads(0), _speed(0)
 {
 }
@@ -106,7 +108,7 @@ DPDK::configure(Vector<String> &conf, ErrorHandler *errh)
 	_drain_us = 100;
 
 	String speed = "AUTO";
-	
+
 	if (Args(conf, this, errh)
 	    .read_mp("ETHER", _macaddr)
 	    .read("DRAIN", _drain_us)
@@ -132,6 +134,7 @@ DPDK::configure(Vector<String> &conf, ErrorHandler *errh)
 	    .read("TX_TCP_CHECKSUM", _tx_tcp_checksum)
 	    .read("TX_UDP_CHECKSUM", _tx_udp_checksum)
 	    .read("TX_TCP_TSO", _tx_tcp_tso)
+	    .read("HASH_OFFLOAD", DPDK::rss_hash_enabled)
 		.complete() < 0)
 		return -1;
 
@@ -186,8 +189,13 @@ DPDK::configure(Vector<String> &conf, ErrorHandler *errh)
 	_drain_tsc = _drain_us * ((rte_get_tsc_hz() + US_PER_S - 1)/US_PER_S);
 
 //	int max_socket = 0;
+//  #if (RTE_VERSION >= RTE_VERSION_NUM(18,5,0,0))
+//	for (int port = 0; port < rte_eth_dev_count_avail(); port++)
+//    max_socket = RTE_MAX(max_socket, rte_eth_dev_socket_id(port));
+//  #else
 //	for (int port = 0; port < rte_eth_dev_count(); port++)
-//		max_socket = RTE_MAX(max_socket, rte_eth_dev_socket_id(port));
+//    max_socket = RTE_MAX(max_socket, rte_eth_dev_socket_id(port));
+//  #endif
 
 	// Get the number of threads
 	_nthreads = master()->nthreads();
@@ -288,7 +296,12 @@ DPDK::initialize(ErrorHandler *errh)
 	// Get port index by comparing the MAC address
 	_port = -1;
 	click_chatter("-------------------------------------------");
-	for (uint8_t port = 0; port < rte_eth_dev_count(); port++) {
+    
+#if (RTE_VERSION >= RTE_VERSION_NUM(18,5,0,0))
+	for (uint8_t port = 0; port < rte_eth_dev_count_avail(); port++) {
+#else
+    for (uint8_t port = 0; port < rte_eth_dev_count(); port++) {
+#endif
 		struct ether_addr ether_addr;
 		rte_eth_macaddr_get(port, &ether_addr);
 
@@ -367,13 +380,14 @@ DPDK::initialize(ErrorHandler *errh)
 	port_conf.intr_conf.rxq = 0; // Set to 1 to test RX interrupts
 
 	//TODO Verify symmetry
-	if (_nthreads > 1) {
-		port_conf.rxmode.mq_mode = ETH_MQ_RX_RSS;
-		port_conf.rx_adv_conf.rss_conf.rss_key = key;
-		port_conf.rx_adv_conf.rss_conf.rss_key_len = sizeof(key);
-		port_conf.rx_adv_conf.rss_conf.rss_hf = 
-		                  ETH_RSS_IP | ETH_RSS_UDP | ETH_RSS_TCP | ETH_RSS_SCTP;
-	}
+	// Commented,  to force using rss also with 1 thread
+	// if (_nthreads > 1) {
+    port_conf.rxmode.mq_mode = ETH_MQ_RX_RSS;
+    port_conf.rx_adv_conf.rss_conf.rss_key = key;
+    port_conf.rx_adv_conf.rss_conf.rss_key_len = sizeof(key);
+    port_conf.rx_adv_conf.rss_conf.rss_hf =
+                        ETH_RSS_IP | ETH_RSS_UDP | ETH_RSS_TCP | ETH_RSS_SCTP;
+	//}
 
 	// Get device socket (only relevant in NUMA architectures)
 	s = rte_eth_dev_socket_id(_port);

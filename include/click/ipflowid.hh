@@ -1,8 +1,17 @@
 // -*- related-file-name: "../../lib/ipflowid.cc" -*-
+// Modified by Marco Trinelli
+
 #ifndef CLICK_IPFLOWID_HH
 #define CLICK_IPFLOWID_HH
 #include <click/ipaddress.hh>
 #include <click/hashcode.hh>
+
+#if HAVE_DPDK
+#include <rte_thash.h>
+#include "../../elements/userlevel/dpdk.hh"
+
+#endif
+
 CLICK_DECLS
 class Packet;
 
@@ -95,6 +104,11 @@ class IPFlowID { public:
 	_dport = p;
     }
 
+    /** @brief Set hashcode */
+    void set_hashcode(hashcode_t hash) {
+	_hash = hash;
+    }
+
     /** @brief Set this flow to the given value.
      * @param saddr source address
      * @param sport source port, in network order
@@ -140,6 +154,9 @@ class IPFlowID { public:
     int unparse(char *s) const;
     friend StringAccum &operator<<(StringAccum &sa, const IPFlowID &flow_id);
 
+  private:
+    hashcode_t _hash = 0;
+
 };
 
 
@@ -153,13 +170,33 @@ inline IPFlowID IPFlowID::rev() const
 
 inline hashcode_t IPFlowID::hashcode() const
 {
-    // more complicated hashcode, but causes less collision
-    uint16_t s = ntohs(sport());
-    uint16_t d = ntohs(dport());
-    hashcode_t sx = CLICK_NAME(hashcode)(saddr());
-    hashcode_t dx = CLICK_NAME(hashcode)(daddr());
-    return (ROT(sx, (s % 16) + 1) ^ ROT(dx, 31 - (d % 16)))
-	^ ((d << 16) | s);
+
+    if (!DPDK::rss_hash_enabled) {
+        // click_chatter("RSS hash disabled");
+	// more complicated hashcode, but causes less collision
+        uint16_t s = ntohs(sport());
+        uint16_t d = ntohs(dport());
+        hashcode_t sx = CLICK_NAME(hashcode)(saddr());
+        hashcode_t dx = CLICK_NAME(hashcode)(daddr());
+        return (ROT(sx, (s % 16) + 1) ^ ROT(dx, 31 - (d % 16)))
+	    ^ ((d << 16) | s);
+    } else {
+	// click_chatter("RSS hash enabled");
+        rte_ipv4_tuple tuple;
+        tuple.src_addr = (uint32_t) saddr();
+        tuple.dst_addr = (uint32_t) daddr();
+        tuple.sport = (uint16_t) sport();
+        tuple.dport = (uint16_t) dport();
+
+        // hashcode_t h1 = _hash;
+        // hashcode_t h2 = rte_softrss_be((uint32_t *) &tuple, (uint32_t) sizeof(tuple)/4, rsskey);
+        // click_chatter("IPFlowID - h1: %lu, h2: %lu", h1, h2);
+        if (_hash)
+            return _hash;
+        else
+            return rte_softrss_be((uint32_t *) &tuple, (uint32_t) sizeof(tuple)/4, (uint8_t *) &DPDK::key);
+
+    }
 }
 
 #undef ROT

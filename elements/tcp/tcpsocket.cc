@@ -172,6 +172,7 @@ TCPSocket::set_task(int pid, int sockfd, BlockingTask * t)
 	
 	//Override
 	s->task = t;
+	return 0;
 }
 
 int

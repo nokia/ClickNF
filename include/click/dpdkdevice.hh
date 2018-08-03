@@ -1,6 +1,8 @@
 #ifndef CLICK_DPDKDEVICE_HH
 #define CLICK_DPDKDEVICE_HH
-
+/*
+ * Updated to DPDK 18.05 by Marco Trinelli (Nokia Bell Labs)
+*/
 //Prevent bug under some configurations (like travis-ci's one) where these macros get undefined
 #ifndef UINT8_MAX
 #define UINT8_MAX 255
@@ -115,9 +117,20 @@ private:
 
     static int get_port_from_pci(uint16_t domain, uint8_t bus, uint8_t dev_id, uint8_t function) {
        struct rte_eth_dev_info dev_info;
-       for (uint8_t port_id = 0 ; port_id < rte_eth_dev_count(); ++port_id) {
+       
+#if (RTE_VERSION >= RTE_VERSION_NUM(18,5,0,0))
+    for (uint8_t port_id = 0 ; port_id < rte_eth_dev_count_avail(); ++port_id) {
+#else
+     for (uint8_t port_id = 0 ; port_id < rte_eth_dev_count(); ++port_id) {
+#endif
           rte_eth_dev_info_get(port_id, &dev_info);
+          
+#if (RTE_VERSION >= RTE_VERSION_NUM(18,5,0,0))          
+          struct rte_pci_device *dev = RTE_DEV_TO_PCI(dev_info.device);
+          struct rte_pci_addr addr = dev->addr;
+#else
           struct rte_pci_addr addr = dev_info.pci_dev->addr;
+#endif
           if (addr.domain   == domain &&
               addr.bus      == bus &&
               addr.devid    == dev_id &&
