@@ -137,6 +137,9 @@ class IPAddress { public:
     inline IPAddress& operator&=(IPAddress);
     inline IPAddress& operator|=(IPAddress);
     inline IPAddress& operator^=(IPAddress);
+    inline IPAddress operator*() const {
+        return *this;
+    }
 
     String unparse() const;
     String unparse_mask() const;

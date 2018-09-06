@@ -548,12 +548,6 @@ TCPSocket::__bind(TCPState *s, IPAddress &addr, uint16_t &port, bool bind_addres
 			return -1;
 		}
 	}
-	else {
-		if (!TCPInfo::port_get(addr, port, s)) {
-			errno = EADDRINUSE;
-			return -1;
-		}
-	}
 
 	// Set IP address and port
 	s->flow.set_saddr(addr);

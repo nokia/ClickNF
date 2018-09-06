@@ -8,7 +8,7 @@ extends CliMB in several directions. For instance, ClickNF takes advantage of ha
 scalability, timing wheels, and an epoll-based API to improve performance. Finally, L7 modularity and SSL/TLS 
 termination provide building blocks for novel network functions to be deployed with little effort. 
 
-**ClickNF has been accepted for publication in Usenix ATC 2018!** 
+**ClickNF has been presented at Usenix ATC 2018 https://www.usenix.org/conference/atc18/presentation/gallo ** 
 
 If you have any question/issue with the code, please use github or contact me at massimo.gallo@nokia-bell-labs.com
 
