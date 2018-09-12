@@ -8,7 +8,7 @@ extends CliMB in several directions. For instance, ClickNF takes advantage of ha
 scalability, timing wheels, and an epoll-based API to improve performance. Finally, L7 modularity and SSL/TLS 
 termination provide building blocks for novel network functions to be deployed with little effort. 
 
-**ClickNF has been presented at Usenix ATC 2018 https://www.usenix.org/conference/atc18/presentation/gallo ** 
+**C lickNF has been presented at Usenix ATC 2018 https://www.usenix.org/conference/atc18/presentation/gallo ** 
 
 If you have any question/issue with the code, please use github or contact me at massimo.gallo@nokia-bell-labs.com
 
@@ -101,6 +101,8 @@ The examples consists in:
 All the examples below uses the test-tcp-layer2.click compound element that provide TCP stack to Click. Each element 
 used in the configuration files has a number of parameters that can be used to change their behavior. Note that, to
 run the experiments, you need to change at least IP and MAC addresses in the configurations provided. 
+
+For some details about the usage of TCPEpollServer/Client building blocks used to develop modula apps, please read the modules' README in tcpepollserver.cc and tcpepollclient.cc .
 
 Bulk transfer: 
 ------------------------
