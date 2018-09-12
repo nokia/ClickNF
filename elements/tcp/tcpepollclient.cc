@@ -1,7 +1,25 @@
 /*
  * tcpepollclient.{cc,hh} -- a TCP client using epoll_wait()
  * Massimo Gallo
+ * 
+ *	LAN				    ClickNF
+ *		|   __________	       ________________		 ________________
+ *		|  |	      |	 ---> |                |  --->  |                |
+ * Server <->   |  | TCPStack |	      | TCPEpollClient |	|	App	 |
+ * 		|  |__________|	 <--- |________________|  <---  |________________|
  *
+ * 
+ * TCPEpollClient and App communicates through metadata attached to small signalling packets or to packets with payload to deliver to the App itself or to the TCPEpollClient
+ * 
+ * The metadata (annotations in Click) are:
+ * 	- SOCKFD_ANNO contained in all packets exchanged between App and TCPEpollClient. Indicates the file descriptor with which the App element want to interact (e.g., send data) or the the file descriptor from witch the packet (signalling or payload is coming)
+ *	- SOCK_DEL_FLAG_ANNO contained in signalling packets between App <---> TCPEpollClient. Indicates that the annotated file decriptor is no longer valid (i.e., remotely disconnected) or that the App element want to terminate a connection to the remote Server associated to the annotated file descriptor. 
+ * 	- SOCK_ADD_FLAG_ANNO contained in signalling packets from App ---> TCPEpollClient. Indicates the App element want to establish a connection with a remote Server.
+ * 	- dst_ip_anno (legacy Click packet annotation) contained in signalling ADD packets from App ---> TCPEpollClient. Indicates the IP address to which the App elements want to connect.
+ * 	- TCP_DPORT_ANNO contained in signalling ADD packets from App ---> TCPEpollClient. Indicates the IP address to which the App elements want to connect.
+ * 	- SOCK_OUT_FLAG_ANNO contained in signalling packets from TCPEpollClient ---> App. Indicates the connection previously requested has been established. 
+ * 
+ * 
  * Copyright (c) 2018 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:

@@ -2,7 +2,22 @@
  * tcpepollserver.{cc,hh} -- a generic TCP server using epoll_wait()
  * Rafael Laufer, Massimo Gallo
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ *	LAN				    ClickNF
+ *		|   __________	       ________________		 ________________
+ *		|  |	      |	 ---> |                |  --->  |                |
+ * Client <->   |  | TCPStack |	      | TCPEpollServer |	|	App	 |
+ * 		|  |__________|	 <--- |________________|  <---  |________________|
+ *
+ * 
+ * TCPEpollServer and App communicates through metadata attached to small signalling packets or to packets with payload to deliver to the App itself or to the TCPEpollServer
+ * 
+ * The metadata (annotations in Click) are:
+ * 	- SOCKFD_ANNO contained in all packets exchanged between App and TCPEpollServer. Indicates the file descriptor with which the App element want to interact (e.g., send data) or the the file descriptor from witch the packet (signalling or payload is coming)
+ *	- SOCK_DEL_FLAG_ANNO contained in signalling packets between App <---> TCPEpollServer. Indicates that the annotated file decriptor is no longer valid (i.e., remotely disconnected) or that the App element want to terminate a connection to the remote Client associated to the annotated file descriptor. 
+ * 	- SOCK_ADD_FLAG_ANNO contained in signalling packets from TCPEpollServer ---> App. Indicates a new connection associated with the annotated file descriptor has been established.
+ * 
+ * 
+ * Copyright (c) 2018 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
