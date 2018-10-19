@@ -81,7 +81,7 @@ RUN
 
 To run ClickNF run this command in its root directory:
 
-sudo bin/click --dpdk -c0x01 -n10 --  conf/test-tcp-echo-server-epoll-zc-dpdk-modular.click
+sudo bin/click --dpdk -c0x01 -n10 --  conf/conf/bulk-server.click
 
 in which -c and -n are DPDK parameters sets the number of cpus and memory channels respectively. 
 
