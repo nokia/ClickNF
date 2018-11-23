@@ -238,6 +238,9 @@ Socks4Proxy::push(int port, Packet *p)
 					//Remove socket towards Server
 					socket_remove(c,pair);
 				}
+				else
+					p->kill();
+				
 				socket_remove(c, fd);
 				return;
 			}
