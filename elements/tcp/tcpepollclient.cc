@@ -260,6 +260,7 @@ TCPEpollClient::push(int port, Packet *p)
 		// Force outbound connections to use client's address. 
 		if (click_setsockopt(sockfd, SOL_IP, IP_BIND_ADDRESS_NO_PORT,NULL,0)){
 			perror("setsockopt");
+			p->kill();
 			return;
 		}
 
