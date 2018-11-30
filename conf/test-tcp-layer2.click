@@ -129,9 +129,8 @@ elementclass TCPLayer {	__REST__ $rest |
 	          -> proctxt :: TCPProcessTxt       // Process segment text
 	          -> procfin :: TCPProcessFin       // Process FIN flag
 	          -> congcon :: TCPNewRenoAck       // Update cong. control state
-	          -> TCPAckRequired                 // Check if an ACK is needed
 	          -> TCPReplacePacket               // Kill old and allocate new pkt
-	          -> TCPRateControl                 // Control transmission rate
+	          -> TCPRateControl                 // Control transmission rate and check if an ACK is needed
 	          -> snd_ack;
 
 	             optpars[1] -> TCPReplacePacket -> snd_ack;

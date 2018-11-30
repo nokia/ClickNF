@@ -41,6 +41,8 @@ TCPReplacePacket::smaction(Packet *p)
 	// Save timestamp
 	Timestamp now = p->timestamp_anno();
 	
+	// Save ACK REQUIRED annotation
+	bool ackreq = TCP_ACK_FLAG_ANNO(p);
 	// If packet is shared, kill it and allocate a new one
 	if (p->shared()) {
 		// Kill packet
@@ -52,6 +54,9 @@ TCPReplacePacket::smaction(Packet *p)
 
 		// Load timestamp
 		q->set_timestamp_anno(now);
+		
+		if(ackreq)
+			SET_TCP_ACK_FLAG_ANNO(q);
 
 		SET_TCP_STATE_ANNO(q, (uint64_t)s);
 		return q;
@@ -60,9 +65,12 @@ TCPReplacePacket::smaction(Packet *p)
 	// Otherwise, reuse the same packet
 	p->reset();
 	SET_TCP_STATE_ANNO(p, (uint64_t)s);
-	
+
 	// Load timestamp
 	p->set_timestamp_anno(now);
+	
+	if(ackreq)
+		SET_TCP_ACK_FLAG_ANNO(p);
 
 	return p;
 }
