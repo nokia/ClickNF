@@ -303,10 +303,15 @@ TCPEpollServer::push(int port, Packet *p)
 		return;
 	}
 	if (TCP_SOCK_DEL_FLAG_ANNO(p)) {
-		if (click_epoll_ctl(t->epfd, EPOLL_CTL_DEL, sockfd, NULL) < 0)
-			perror("epoll_ctl");
-
-		click_close(sockfd);
+	  
+		if (click_close(sockfd) == -1 ){
+		    if (errno != EAGAIN){
+			// Remove sockfd from epoll 
+			if (click_epoll_ctl(t->epfd, EPOLL_CTL_DEL, sockfd, NULL) < 0)
+			    perror("epoll_ctl");
+		    }
+		}
+		
 		p->kill();
 		return;
 	}

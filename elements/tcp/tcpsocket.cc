@@ -1639,17 +1639,24 @@ TCPSocket::close(int pid, int sockfd)
 #if CLICK_STATS >= 2
 		delta += (click_get_cycles() - start_cycles);
 #endif
-		// Block until the TX queue is empty (or return EAGAIN if nonblocking)
-		int ret = s->wait_event(TCP_WAIT_TXQ_EMPTY);
+		// If SOCK_LINGER not set (only SO_LINGER {on, 0} supported) wait until the TX queue is empty (or return EAGAIN if nonblocking)
+		int ret = 0;
+		if (!(s->flags & SOCK_LINGER)) {
+		      ret = s->wait_event(TCP_WAIT_TXQ_EMPTY);
 #if CLICK_STATS >= 2
 		start_cycles = click_get_cycles() ;
 #endif
-		if (ret) {
-			errno = ret;
-			return -1;
+		      if (ret) {
+				  //Wait for txq 
+				  if (s->flags & SOCK_NONBLOCK){
+				      s->wait_event_reset();
+				      s->wait_event_set(TCP_WAIT_TXQ_EMPTY);
+				  }
+				  errno = ret;
+				  return -1;
+		      }
 		}
-		click_assert(s->txq.empty());
-
+		
 		if (s->state == TCP_ESTABLISHED)
 			s->state = TCP_FIN_WAIT1;
 		else
@@ -1695,6 +1702,8 @@ TCPSocket::close(int pid, int sockfd)
 			TCPInfo::dec_usr_sockets(pid);
 		}
 		else {
+			click_assert(s->txq.empty());
+			
 			// Increase sequence number
 			s->snd_nxt++;
 
