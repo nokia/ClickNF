@@ -170,7 +170,7 @@ inline IPFlowID IPFlowID::rev() const
 
 inline hashcode_t IPFlowID::hashcode() const
 {
-
+#if HAVE_DPDK
     if (!DPDK::rss_hash_enabled) {
         // click_chatter("RSS hash disabled");
 	// more complicated hashcode, but causes less collision
@@ -197,6 +197,14 @@ inline hashcode_t IPFlowID::hashcode() const
             return rte_softrss_be((uint32_t *) &tuple, (uint32_t) sizeof(tuple)/4, (uint8_t *) &DPDK::key);
 
     }
+#else
+  uint16_t s = ntohs(sport());
+  uint16_t d = ntohs(dport());
+  hashcode_t sx = CLICK_NAME(hashcode)(saddr());
+  hashcode_t dx = CLICK_NAME(hashcode)(daddr());
+  return (ROT(sx, (s % 16) + 1) ^ ROT(dx, 31 - (d % 16))) ^ ((d << 16) | s);
+#endif
+
 }
 
 #undef ROT
