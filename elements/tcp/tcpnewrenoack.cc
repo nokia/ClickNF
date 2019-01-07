@@ -145,6 +145,9 @@ TCPNewRenoAck::handle_ack(Packet *p)
 			WritablePacket *wp = c->uniqueify();
 			click_assert(wp);
 
+			wp->set_prev(NULL);
+			wp->set_next(NULL);
+
 			// Deflate cwnd by the amount of new data acknowledged
 			s->snd_cwnd -= MIN(s->snd_cwnd, acked);
 
@@ -333,6 +336,9 @@ TCPNewRenoAck::handle_old(Packet *p)
 		click_assert(c);
 		WritablePacket *wp = c->uniqueify();
 		click_assert(wp);
+
+                wp->set_prev(NULL);
+                wp->set_next(NULL);
 
 		// Increment RTX counter
 		s->snd_rtx_count++;
