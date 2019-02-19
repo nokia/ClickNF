@@ -78,6 +78,8 @@ class SSLServer : public SSLBase { public:
 	SSL_CTX *_ctx;
 	ThreadData *_thread;
 	uint32_t _nthreads;
+	bool _verbose;
+
 # endif
 };
 

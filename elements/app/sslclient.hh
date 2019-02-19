@@ -64,6 +64,8 @@ class SSLClient : public SSLBase { public:
 	SSL_CTX *_ctx;
 	bool _self_signed;
 	Vector<SSLSocket> _socket;
+	bool _verbose;
+
 
 # endif
 };

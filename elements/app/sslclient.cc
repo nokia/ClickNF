@@ -37,7 +37,7 @@
 CLICK_DECLS
 
 #if HAVE_OPENSSL
-SSLClient::SSLClient()
+SSLClient::SSLClient() : _verbose(false)
 {
 }
 
@@ -49,7 +49,8 @@ SSLClient::configure(Vector<String> &conf, ErrorHandler *errh)
 
 	if (Args(conf, this, errh)
 		.read("SELF_SIGNED", _self_signed)
-	    .complete() < 0)
+		.read("VERBOSE", _verbose)
+		.complete() < 0)
 		return -1;
 
     return 0;
@@ -139,7 +140,10 @@ SSLClient::push(int port, Packet *p)
 
 		// Empty packet
 		if (!p->length()) {
-			p->kill();
+			if (TCP_SOCK_ADD_FLAG_ANNO(p) || TCP_SOCK_DEL_FLAG_ANNO(p) || TCP_SOCK_OUT_FLAG_ANNO(p))
+				output(SSL_CLIENT_OUT_APP_PORT).push(p);
+			else
+				p->kill();
 			return;
 		}
 
@@ -196,6 +200,9 @@ SSLClient::push(int port, Packet *p)
 
 			// Start SSL handshake
 			SSL_do_handshake(s->ssl);
+			
+			if (_verbose)
+				click_chatter("%s: SSL Handshake started sockfd %d", class_name(), sockfd);
 		}
 
 		// No SSL socket
@@ -210,7 +217,7 @@ SSLClient::push(int port, Packet *p)
 
 		// Empty packet
 		if (!p->length()) {
-			if (TCP_SOCK_ADD_FLAG_ANNO(p) || TCP_SOCK_DEL_FLAG_ANNO(p))
+			if (TCP_SOCK_ADD_FLAG_ANNO(p)) //NOTE Packet with TCP_SOCK_DEL_FLAG_ANNO will be sent after SSL shutdown
 				output(SSL_CLIENT_OUT_NET_PORT).push(p);
 			else
 				p->kill();
@@ -296,7 +303,8 @@ SSLClient::push(int port, Packet *p)
 
 	// Check if we should shutdown the connection
 	if (s->txq.empty() && s->shutdown) {
-		click_chatter("%s: shutting down sockfd %d", class_name(), sockfd);
+		if (_verbose)
+			click_chatter("%s: shutting down sockfd %d", class_name(), sockfd);
 		SSL_shutdown(s->ssl);
 	}
 
@@ -321,8 +329,9 @@ SSLClient::push(int port, Packet *p)
 	}
 
 	// If the connection shutdown was clean, release resources
-	if (SSL_get_shutdown(s->ssl) == (SSL_SENT_SHUTDOWN|SSL_RECEIVED_SHUTDOWN)) {
-		click_chatter("%s: shutting down sockfd %d", class_name(), sockfd);
+	if (SSL_get_shutdown(s->ssl) & (SSL_SENT_SHUTDOWN|SSL_RECEIVED_SHUTDOWN)) {
+		if (_verbose)
+			click_chatter("%s: Propagating shutdown to lower layers sockfd %d", class_name(), sockfd);
 
 		SSL_free(s->ssl);
 		s->clear();

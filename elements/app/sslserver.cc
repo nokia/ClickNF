@@ -37,7 +37,7 @@
 CLICK_DECLS
 
 #if HAVE_OPENSSL
-SSLServer::SSLServer()
+SSLServer::SSLServer() : _verbose(false)
 {
 }
 
@@ -266,6 +266,9 @@ SSLServer::push(int port, Packet *p)
 
 			// Set behavior
 			SSL_set_accept_state(s->ssl);
+			
+			if (_verbose)
+				click_chatter("%s: Accepting SSL connection on sockfd %d", class_name(), sockfd);
 		}
 
 		// No SSL socket
@@ -279,6 +282,9 @@ SSLServer::push(int port, Packet *p)
 			SSL_shutdown(s->ssl);
 			SSL_free(s->ssl);
 			s->clear();
+			
+			if (_verbose)
+				click_chatter("%s: Connection cloded by peer on sockfd %d", class_name(), sockfd);
 
 			// Notify application
 			output(SSL_SERVER_OUT_APP_PORT).push(p);
@@ -323,6 +329,9 @@ SSLServer::push(int port, Packet *p)
 		if (!SSL_is_init_finished(s->ssl))
 			SSL_do_handshake(s->ssl);
 
+		if (_verbose)
+			click_chatter("%s: SSL Handshake finished on sockfd %d", class_name(), sockfd);
+		
 		break;
 
 	case SSL_SERVER__IN_APP_PORT:
@@ -349,8 +358,11 @@ SSLServer::push(int port, Packet *p)
 		s->txq.push_back(p);
 
 		// If SSL handshake is not finished, try again later
-		if (!SSL_is_init_finished(s->ssl))
+		if (!SSL_is_init_finished(s->ssl)){
+			if (_verbose)
+				click_chatter("%s: SSL Handshake on sockfd %d not finished yet", class_name(), sockfd);
 			break;
+		}
 
 		// If handshake is over and there are packets in the queue, send them
 		while (!s->txq.empty()) {
@@ -384,8 +396,11 @@ SSLServer::push(int port, Packet *p)
 		assert(0);
 	}
 
-	if (s->txq.empty() && s->shutdown)
+	if (s->txq.empty() && s->shutdown){
+		if (_verbose)
+			click_chatter("%s: shutting down sockfd %d", class_name(), sockfd);
 		SSL_shutdown(s->ssl);
+	}
 
 	// Read cleartext and send it to the application
 	while (SSL_pending(s->ssl) || BIO_ctrl_pending(s->wbio)) {
@@ -426,7 +441,9 @@ SSLServer::push(int port, Packet *p)
 	}
 
 	// If the connection shutdown was clean, release resources
-	if (SSL_get_shutdown(s->ssl) == (SSL_SENT_SHUTDOWN|SSL_RECEIVED_SHUTDOWN)) {
+	if (SSL_get_shutdown(s->ssl) & (SSL_SENT_SHUTDOWN|SSL_RECEIVED_SHUTDOWN)) {
+		if (_verbose)
+			click_chatter("%s: Propagating shutdown to lower layers sockfd %d", class_name(), sockfd);
 		SSL_free(s->ssl);
 		s->clear();
 
