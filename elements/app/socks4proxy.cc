@@ -257,7 +257,7 @@ Socks4Proxy::push(int port, Packet *p)
 				char msg[8] = { 0x00, 0x5a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 				q = q->push(8);
 				memcpy((void *)q->data(), msg, 8);
-				SET_TCP_SOCKFD_ANNO(q, fd);
+				SET_TCP_SOCKFD_ANNO(q, _socketTable[c][fd].pair);
 				output(SOCKS4PROXY_OUT_SRV_PORT).push(q);
 				return;
 			}
