@@ -96,6 +96,7 @@ TCPEpollClient::initialize(ErrorHandler *errh)
 	// Start per-core tasks
 	for (uint32_t c = 0; c < _nthreads; c++) {
 		BlockingTask *t = new BlockingTask(this);
+		_thread[c].sockTable = 	Vector<Socket>(TCP_USR_CAPACITY, Socket());
 		_thread[c].task = t;
 		ScheduleInfo::initialize_task(this, t, errh);
 		t->move_thread(c);	
@@ -184,27 +185,69 @@ TCPEpollClient::selected(int sockfd, int revents)
 		// Incoming data from socket in epoll
 		if (_verbose)
 			click_chatter("%s: event on sockfd = %d", class_name(), sockfd);
-
-		Packet *p = click_pull(sockfd, _batch);
-		if (!p) {
-			perror("pull");
-
-			if (click_epoll_ctl(t->epfd, EPOLL_CTL_DEL, sockfd, NULL) < 0)
-				perror("epoll_ctl");
-
-			click_close(sockfd);
-			p = Packet::make((const void *)NULL, 0);
-			SET_TCP_SOCK_DEL_FLAG_ANNO(p);
+		//TODO Send batches instead of single packets if possible
+		//Drain RX queue
+		Packet *p = NULL; 
+		while (p = click_pull(sockfd, _batch)){
+			Packet* next=NULL;
+			Packet* curr=p;
+			while (curr){
+				next = curr->next();
+				curr->set_next(NULL);
+				curr->set_prev(NULL);
+				if (!p->length()) {
+					p->kill();
+					break;
+				}
+				SET_TCP_SOCKFD_ANNO(curr, sockfd);
+				output(TCP_EPOLL_CLIENT_OUT_APP_PORT).push(curr);
+				curr = next;
+			}
 		}
-		else if (!p->length()) {
-			if (click_epoll_ctl(t->epfd, EPOLL_CTL_DEL, sockfd, NULL) < 0)
-				perror("epoll_ctl");
+	}
 
-			click_close(sockfd);
-			SET_TCP_SOCK_DEL_FLAG_ANNO(p);
+	if (revents & EPOLLOUT) {
+		if (_verbose)
+			click_chatter("%s: EPOLLOUT event on sockfd = %d", class_name(), sockfd);
+		while ( _thread[c].sockTable[sockfd].queue.size() ){
+			Packet* f = _thread[c].sockTable[sockfd].queue.front();
+			_thread[c].sockTable[sockfd].queue.pop_front();
+			
+			f->set_next(NULL);
+			f->set_prev(NULL);
+			
+			click_push(sockfd,f);
+			if (errno) {
+				//Put back packet at front to preserve in-order delivery
+				if (errno == EAGAIN){
+					_thread[c].sockTable[sockfd].queue.push_front(f);
+					return;
+				}
+				else {
+					perror("push");
+					// Remove sockfd from epoll
+					if (click_epoll_ctl(t->epfd, EPOLL_CTL_DEL, sockfd, NULL) < 0)
+						perror("epoll_ctl");
+					//Clear sockfd packet queue
+					_thread[c].sockTable[sockfd].queue.clear();
+					return;
+				}
+			}			  
 		}
-		SET_TCP_SOCKFD_ANNO(p, sockfd);
-		output(TCP_EPOLL_CLIENT_OUT_APP_PORT).push(p);
+		if (! (_thread[c].sockTable[sockfd].queue.size()) ) {
+			if (_verbose)
+				click_chatter("%s: unregistering sockfd %d ofr  EPOLLOUT event", class_name(), sockfd);
+			struct epoll_event ev;
+			ev.events = EPOLLIN;
+			ev.data.fd = sockfd;
+
+			if (click_epoll_ctl(t->epfd, EPOLL_CTL_MOD, sockfd, &ev) < 0) {
+				perror("epoll_ctl");
+				click_close(sockfd);
+				return;
+			}
+		}
+		
 	}
 
 	// Check for errors
@@ -258,7 +301,7 @@ TCPEpollClient::push(int port, Packet *p)
 		}
 
 		// Force outbound connections to use client's address. 
-		if (click_setsockopt(sockfd, SOL_IP, IP_BIND_ADDRESS_NO_PORT,NULL,0)){
+		if (click_setsockopt(sockfd, SOL_IP, IP_BIND_ADDRESS_NO_PORT,NULL,0)<0){
 			perror("setsockopt");
 			p->kill();
 			return;
@@ -328,11 +371,36 @@ TCPEpollClient::push(int port, Packet *p)
 	if (_verbose)
 		click_chatter("%s: Fwd a packet of %d bytes on established cponnection pair", class_name(), p->length());
 	
+	if (_thread[c].sockTable[sockfd].queue.size()){
+		_thread[c].sockTable[sockfd].queue.push_back(p);
+		return;
+	}
+	
 	click_push(sockfd, p);
 
 	if (errno) {
-		perror("push");
-		p->kill();
+		//Save packet and register for EPOLLOUT if not enough space in TXQ 
+		if (errno == EAGAIN){
+			if (_verbose)
+				click_chatter("%s: registering sockfd  %d for EPOLLOUT event", class_name(),  sockfd);
+			
+			struct epoll_event ev;
+			ev.events = EPOLLIN|EPOLLOUT;
+			ev.data.fd = sockfd;
+
+			if (click_epoll_ctl(t->epfd, EPOLL_CTL_MOD, sockfd, &ev) < 0) {
+				perror("epoll_ctl");
+				click_close(sockfd);
+				return;
+			}
+			_thread[c].sockTable[sockfd].queue.push_back(p);
+			return;
+			
+		}
+		else{
+			perror("push");
+			p->kill();
+		}
 	}
 }
 

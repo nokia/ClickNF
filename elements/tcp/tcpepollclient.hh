@@ -27,6 +27,7 @@
 #ifndef CLICK_TCPEPOLLCLIENT_HH
 #define CLICK_TCPEPOLLCLIENT_HH
 #include <click/element.hh>
+#include <click/packetqueue.hh>
 #include "tcpapplication.hh"
 #include "blockingtask.hh"
 CLICK_DECLS
@@ -47,10 +48,19 @@ class TCPEpollClient final : public TCPApplication { public:
 	int configure(Vector<String> &, ErrorHandler *) CLICK_COLD;
 	int initialize(ErrorHandler *) CLICK_COLD;
 
+	struct Socket {
+		Socket() { }
+
+		PacketQueue queue;
+	};
+	
+	typedef	Vector<struct Socket> SocketTable;
+	
 	struct ThreadData {
 		int epfd;
 		int lfd;
 		BlockingTask *task;
+		SocketTable  sockTable;
 
 		ThreadData() : epfd(-1), lfd(-1), task(NULL) { }
 	} CLICK_ALIGNED(CLICK_CACHE_LINE_SIZE);
