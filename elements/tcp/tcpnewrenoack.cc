@@ -32,6 +32,7 @@
 #include <click/timestamp.hh>
 #include <click/straccum.hh>
 #include "tcpnewrenoack.hh"
+#include "tcpackoptionsencap.hh"
 #include "tcpstate.hh"
 #include "tcpinfo.hh"
 #include "util.hh"
@@ -69,7 +70,7 @@ TCPNewRenoAck::handle_ack(Packet *p)
 	// to the size of the largest possible advertised window), but ssthresh
 	// MUST be reduced in response to congestion.
 	if (s->snd_ssthresh == 0)
-		s->snd_ssthresh = s->snd_wnd;
+		s->snd_ssthresh = 1 << 31;
 
 	// 6.  When the next ACK arrives that acknowledges previously
 	//     unacknowledged data, a TCP MUST set cwnd to ssthresh (the value
@@ -106,8 +107,8 @@ TCPNewRenoAck::handle_ack(Packet *p)
 			// number of data packets that can be sent in response to a single
 			// acknowledgment.  Exit the fast recovery procedure.
 			uint32_t flight = s->snd_nxt - s->snd_una;
-			s->snd_cwnd = \
-			         MIN(s->snd_ssthresh, MAX(flight, s->snd_mss) + s->snd_mss);
+// 			s->snd_cwnd = MIN(s->snd_ssthresh, MAX(flight, s->snd_mss) + s->snd_mss);
+			s->snd_cwnd = s->snd_ssthresh;
 			s->snd_cwnd = MIN(s->snd_cwnd, s->snd_wnd_max);
 			s->snd_dupack = 0;
 			s->snd_recover = 0;
@@ -140,19 +141,12 @@ TCPNewRenoAck::handle_ack(Packet *p)
 			
 			// Retransmit the first unacknowledged segment
 			click_assert(!s->rtxq.empty());
-			Packet *c = s->rtxq.front()->clone();
-			click_assert(c);
-			WritablePacket *wp = c->uniqueify();
-			click_assert(wp);
-
-			wp->set_prev(NULL);
-			wp->set_next(NULL);
 
 			// Deflate cwnd by the amount of new data acknowledged
 			s->snd_cwnd -= MIN(s->snd_cwnd, acked);
 
 			// If acknowledging at least 1 MSS, add back MSS bytes to cwnd
-			if (acked >= s->snd_mss)
+			if (acked >= (uint32_t)(s->snd_mss-TCPAckOptionsEncap::min_oplen(s)) )
 				s->snd_cwnd = MIN(s->snd_cwnd + s->snd_mss, s->snd_wnd_max);
 
 			// Reset the retransmission timer if this is the first partial ACK
@@ -172,6 +166,21 @@ TCPNewRenoAck::handle_ack(Packet *p)
 				click_chatter("%s: ack, %s, window deflate, partial ACK", \
 			                           class_name(), s->unparse_cong().c_str());
 
+			Packet* r = s->rtxq.front();
+			
+			//Retransmit first not SACKED packet
+			while (r && TCP_SACK_FLAG_ANNO(r))
+			      r = r->next();
+			
+			Packet *c = r->clone();
+
+			click_assert(c);
+			WritablePacket *wp = c->uniqueify();
+			click_assert(wp);
+
+			wp->set_next(NULL);
+			wp->set_prev(NULL);
+			
 			// Increment RTX counter
 			s->snd_rtx_count++;
 
@@ -233,7 +242,6 @@ TCPNewRenoAck::handle_ack(Packet *p)
 			click_chatter("%s: ack, %s, cong avoid, bytes acked %u", \
 			                    class_name(), s->unparse_cong().c_str(), acked);
 	}
-
 	return p;
 }
 
@@ -276,7 +284,7 @@ TCPNewRenoAck::handle_old(Packet *p)
 	               (len == 0)          &&                 // (b)
 	               (!syn && !fin)      &&                 // (c)
 	               (ack == s->snd_una) &&                 // (d)
-	               (win << s->snd_wscale) == s->snd_wnd)  // (e) 
+	               (win << s->snd_wscale) == s->snd_wnd)  // (e)
 		s->snd_dupack++;
 	else {
 		s->snd_dupack = 0;

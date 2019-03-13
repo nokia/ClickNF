@@ -116,7 +116,7 @@ class TCPState { public:
 		return flow;
 	}
 
-
+//TODO Check alignement
 	TCPState *_hashnext;
 //	TCPList_member list;                // list head
 	IPFlowID flow;                      // flow tuple
@@ -159,7 +159,7 @@ class TCPState { public:
 
 	uint32_t snd_cwnd;                  // congestion window
 	uint32_t snd_ssthresh; 	            // slow start threshold
-	uint16_t snd_bytes_acked;           // bytes acked in the cwnd
+	uint32_t snd_bytes_acked;           // bytes acked in the cwnd
 	uint16_t snd_dupack;                // number of consecutive dup acks
 	uint32_t snd_recover;               // last segment when 3rd DUPACK arrives
 	uint16_t snd_parack;                // partial ACK counter
@@ -173,7 +173,7 @@ class TCPState { public:
 	uint32_t snd_isn;                   // initial sequence number
 	uint32_t snd_rto;                   // retransmission timeout
 
-	BlockingTask *task;                     // calling (blocking) task
+	BlockingTask *task;                 // calling (blocking) task
 	TCPState *parent;                   // parent TCB (if passive)
 
 	uint32_t ts_recent;                 // timestamp recent
@@ -211,7 +211,7 @@ class TCPState { public:
 		 unused9:1,
 	         unused10:1;
 
-	char padding[9];
+	char padding[7];
 	TCPTimer rtx_timer; //CLICK_ALIGNED(CLICK_CACHE_LINE_SIZE);
 #if HAVE_TCP_KEEPALIVE
 	TCPTimer keepalive_timer; //CLICK_ALIGNED(CLICK_CACHE_LINE_SIZE);
