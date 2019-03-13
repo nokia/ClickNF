@@ -61,6 +61,8 @@ TCPNewRenoSyn::smaction(Packet *p)
 		s->snd_cwnd = 3*s->snd_mss;
 	else
 		s->snd_cwnd = 4*s->snd_mss;
+	// Force initial window to be equal to 10 SMSS
+	s->snd_cwnd = 10*s->snd_mss;
 
 	// The initial value of ssthresh SHOULD be set arbitrarily high (e.g.,
 	// to the size of the largest possible advertised window), but ssthresh
