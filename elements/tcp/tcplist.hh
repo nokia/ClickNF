@@ -361,6 +361,7 @@ class TCPList { public:
 	/** @brief Remove @a x from the list.
 	 * @param x element to remove
 	 * @pre @a x != NULL && !isolated(@a x)*/
+	//NOTE if x does not belong to this list, it will be removed from its list and TCP_list::size will be corrupted.
 	inline void erase(T *x) {
 		tcpl_assert(x && !isolated(x));
 		erase(&(x->*member));

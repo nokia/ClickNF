@@ -65,8 +65,8 @@ TCPReplacePacket::smaction(Packet *p)
 	// Otherwise, reuse the same packet
 	p->reset();
 	SET_TCP_STATE_ANNO(p, (uint64_t)s);
-
-	// Load timestamp
+	
+	// Load timestamp and ACK REQUIRED annotations
 	p->set_timestamp_anno(now);
 	
 	if(ackreq)

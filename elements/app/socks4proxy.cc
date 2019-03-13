@@ -186,7 +186,6 @@ Socks4Proxy::push(int port, Packet *p)
 
 					p->kill();
 
-
 					//Send an empty message to open connection toward Server (using TCPEpollClient)
 					Packet* q = Packet::make((const void *)NULL, 0);
  
@@ -199,17 +198,13 @@ Socks4Proxy::push(int port, Packet *p)
 				}
 				// Otherwise, this is an already established socket pair
 				else {
-					//TODO Might need to check if _socketTable[c][fd].status == S_ESTABLISHED
-					//In that case, store messages or discard them?
-				  
-					if (_verbose)
-						click_chatter("%s: Second leg not opened yet!!!",class_name());
-					
 					if (!p->length()) {
 						p->kill();
 						return;
 					}
 					int wfd = _socketTable[c][fd].pair;
+					if (_verbose)
+						click_chatter("%s: forwarding packet(%dB) from fd %d to fd %d ",class_name(), p->length(), fd, wfd);
 					SET_TCP_SOCKFD_ANNO(p, wfd);
 					output(SOCKS4PROXY_OUT_CLI_PORT).push(p);
 				}
@@ -267,6 +262,8 @@ Socks4Proxy::push(int port, Packet *p)
 				return;
 			}
 			int wfd = _socketTable[c][fd].pair;
+			if (_verbose)
+				click_chatter("%s: forwarding packet(%dB) from fd %d to fd %d ",class_name(), p->length(), fd, wfd);
 			SET_TCP_SOCKFD_ANNO(p, wfd);
 			output(SOCKS4PROXY_OUT_SRV_PORT).push(p);
 		break;
