@@ -103,8 +103,11 @@ class TCPInfo final : public Element { public:
 	static inline bool epoll_fd_exists(int pid, int epfd);
 	static inline void epoll_fd_put(int pid, int epfd);
 
-	static inline TCPEvent epoll_eq_remove(int pid, int epfd);
-	static inline void epoll_eq_insert(int pid, int epfd, const TCPEvent &tev);
+	static inline TCPEventQueue::iterator epoll_eq_begin(int pid, int epfd);	
+	static inline TCPEventQueue::iterator epoll_eq_end(int pid, int epfd);
+	static inline void epoll_eq_erase(int pid, int epfd, TCPEvent* ev);
+// 	static inline TCPEvent* epoll_eq_pop_front(int pid, int epfd);
+	static inline void epoll_eq_insert(int pid, int epfd, TCPEvent* tev);
 	static inline int epoll_eq_size(int pid, int epfd);
 #endif
 
@@ -222,14 +225,13 @@ inline int
 TCPInfo::flow_remove(TCPState *s)
 {
 	unsigned c = click_current_cpu_id();
+	//Remove associated events with TCPState
+	if ((s->event != NULL) && (s->epfd>0)){
+		TCPInfo::epoll_eq_erase(s->pid, s->epfd, s->event);
+		delete(s->event);
+		s->event = NULL;
+	}
 	return _flowTable[c].remove(s);
-}
-
-inline int
-TCPInfo::flow_remove(const IPFlowID &flow)
-{
-	unsigned c = click_current_cpu_id();
-	return _flowTable[c].remove(flow);
 }
 
 inline bool
@@ -321,7 +323,7 @@ TCPInfo::epoll_fd_get(int pid)
 	if (eq == NULL)
 		_epollTable[c][pid][epfd] = new TCPEventQueue();
 	else
-		eq->clear();
+		return -1;
 
 	_epollFDesc[c][pid].pop_front();
 	return epfd;
@@ -350,7 +352,7 @@ TCPInfo::epoll_fd_put(int pid, int epfd)
 {
 	unsigned c = click_current_cpu_id();
 	TCPEventQueue *eq = _epollTable[c][pid][epfd];
-	eq->clear();
+	delete(eq);
 	_epollFDesc[c][pid].push_back(epfd);
 }
 
@@ -362,32 +364,57 @@ TCPInfo::epoll_eq_size(int pid, int epfd)
 	return eq->size();
 }
 
-inline void
-TCPInfo::epoll_eq_insert(int pid, int epfd, const TCPEvent &tev)
+inline TCPEventQueue::iterator
+TCPInfo::epoll_eq_begin(int pid, int epfd)
 {
 	unsigned c = click_current_cpu_id();
 	TCPEventQueue *eq = _epollTable[c][pid][epfd];
-	TCPEvent *ev = eq->allocate();
-	new(reinterpret_cast<void *>(ev)) TCPEvent(tev);
-	eq->push_back(ev);
-}
-
-inline TCPEvent
-TCPInfo::epoll_eq_remove(int pid, int epfd)
-{
-	unsigned c = click_current_cpu_id();
-	TCPEventQueue *eq = _epollTable[c][pid][epfd];
-	TCPEvent ev(NULL, 0);
 	if (eq->size() > 0) {
-		TCPEvent *f = eq->front();
-		ev.state = f->state;
-		ev.event = f->event;
-		eq->pop_front();
-		eq->deallocate(f);
+		return eq->begin();
 	}
-
-	return ev;
+	return eq->end();
 }
+
+inline TCPEventQueue::iterator
+TCPInfo::epoll_eq_end(int pid, int epfd)
+{
+	unsigned c = click_current_cpu_id();
+	TCPEventQueue *eq = _epollTable[c][pid][epfd];
+	return eq->end();
+}
+
+inline void
+TCPInfo::epoll_eq_erase(int pid, int epfd, TCPEvent* ev)
+{
+	unsigned c = click_current_cpu_id();
+	TCPEventQueue *eq = _epollTable[c][pid][epfd];
+	eq->erase(ev);
+	return;
+}
+
+inline void
+TCPInfo::epoll_eq_insert(int pid, int epfd, TCPEvent* tev)
+{
+	unsigned c = click_current_cpu_id();
+	TCPEventQueue *eq = _epollTable[c][pid][epfd];
+// 	TCPEvent *ev = eq->allocate();
+// 	new(reinterpret_cast<void *>(ev)) TCPEvent(tev);
+	eq->push_back(tev);
+}
+
+// inline TCPEvent*
+// TCPInfo::epoll_eq_pop_front(int pid, int epfd)
+// {
+// 	unsigned c = click_current_cpu_id();
+// 	TCPEventQueue *eq = _epollTable[c][pid][epfd];
+// 	TCPEvent* f = NULL;
+// 	if (eq->size() > 0) {
+// 		f = eq->front();
+// 		eq->pop_front();
+// // 		eq->deallocate(f);
+// 	}
+// 	return f;
+// }
 # endif // HAVE_ALLOW_EPOLL
 
 CLICK_ENDDECLS

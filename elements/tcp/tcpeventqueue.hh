@@ -47,14 +47,26 @@ class TCPEventQueue { public:
 
 	TCPEventQueue() { }
 
-	TCPEvent *allocate();
-	TCPEvent *allocate(TCPState *s);
-	void deallocate(TCPEvent *e);
+// 	TCPEvent *allocate();
+// 	TCPEvent *allocate(TCPState *s);
+// 	void deallocate(TCPEvent *e);
 
 	inline TCPEvent *front() {
 		return _eventQueue.front();
 	}
+	
+	inline TCPList<TCPEvent, &TCPEvent::link>::iterator begin() {
+		return _eventQueue.begin();
+	}
 
+	inline TCPList<TCPEvent, &TCPEvent::link>::iterator end() {
+		return _eventQueue.end();
+	}
+	
+	inline void erase(TCPEvent* ev) {
+		return _eventQueue.erase(ev);
+	}
+	
 	inline void pop_front() {
 		_eventQueue.pop_front();
 	}
@@ -63,18 +75,11 @@ class TCPEventQueue { public:
 		_eventQueue.push_back(e);
 	}
 
-	inline void clear() {
-		while (_eventQueue.size() > 0) {
-			TCPEvent *e = _eventQueue.front();
-			_eventQueue.pop_front();
-			deallocate(e);
-		}
-	}
-
 	inline int size() const {
 		return _eventQueue.size();
 	}
 
+	typedef TCPList<TCPEvent, &TCPEvent::link>::iterator iterator;
   private:
 
 	TCPList<TCPEvent, &TCPEvent::link> _eventQueue;

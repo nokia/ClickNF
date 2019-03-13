@@ -34,6 +34,7 @@
 #include "tcptimers.hh"
 #include "tcpstate.hh"
 #include "tcpinfo.hh"
+#include "tcplist.hh"
 #include "tcpackoptionsencap.hh"
 #include "util.hh"
 CLICK_DECLS
@@ -517,7 +518,7 @@ TCPSocket::__bind(TCPState *s, IPAddress &addr, uint16_t &port, bool bind_addres
 	
 
 
-	// If port is not specified (and bind_address_no_port, try to bind to an ephemeral por
+	// If port is not specified (and bind_address_no_port, try to bind to an ephemeral port
 	if (port != 0){
 		if (!TCPInfo::port_get(addr, port, s)) {
 			      errno = EADDRINUSE;
@@ -676,6 +677,15 @@ TCPSocket::accept(int pid, int sockfd, IPAddress &addr, uint16_t &port)
 	click_assert(t);
 	s->acq_pop_front();
 
+	if(s->acq_empty() && s->event && s->epfd){
+		s->event->event &= ~(TCP_WAIT_ACQ_NONEMPTY);		
+		if (s->event->event == 0){
+			TCPInfo::epoll_eq_erase(pid,s->epfd, s->event);
+			delete(s->event);
+			s->event = NULL;
+		}
+	}
+	
 	// If closed, remove it from the flow table and deallocate
 	if (unlikely(t->state == TCP_CLOSED)) {
 		TCPInfo::flow_remove(t);
@@ -752,30 +762,31 @@ TCPSocket::connect(int pid, int sockfd, IPAddress daddr, uint16_t dport)
 	}
 
 	// Bind to a local interface and port, if needed
-	IPFlowID flow;
-	IPAddress saddr(0);
-	uint16_t sport = 0;
-	if (s->flow.saddr().empty()) {
-		click_assert(s->flow.sport() == 0);
-		Vector<IPAddress> my_addrs = TCPInfo::addr();
-		saddr = my_addrs[0];
-	}
-	else
-		saddr = s->flow.saddr();
-#if HAVE_DPDK
-	flow.assign(saddr, htons(sport), daddr, htons(dport));
-	ret = rss_sport(flow);
-	if (ret == -1)
-		return -1; // errno is set by rss_sport()
-	sport = (uint16_t)ret;
-#endif // HAVE_DPDK
-	
-	//Bind asking for rnd port if sport = 0
-	ret = __bind(s, saddr, sport, false);
-	if (ret) {
-		return -1; // errno is set by bind()
-	}
+	if(!s->bound()){
+		IPFlowID flow;
+		IPAddress saddr(0);
+		uint16_t sport = 0;
+		if (s->flow.saddr().empty()) {
+			click_assert(s->flow.sport() == 0);
+			Vector<IPAddress> my_addrs = TCPInfo::addr();
+			saddr = my_addrs[0];
+		}
+		else
+			saddr = s->flow.saddr();
+	#if HAVE_DPDK
+		flow.assign(saddr, htons(sport), daddr, htons(dport));
+		ret = rss_sport(flow);
+		if (ret == -1)
+			return -1; // errno is set by rss_sport()
+		sport = (uint16_t)ret;
+	#endif // HAVE_DPDK
 
+		//Bind asking for rnd port if sport = 0
+		ret = __bind(s, saddr, sport, false);
+		if (ret) {
+			return -1; // errno is set by bind()
+		}
+	}
 	// Complete flow tuple
 	IPFlowID f = s->flow;
 	f.set_daddr(daddr);
@@ -1001,6 +1012,14 @@ TCPSocket::send(int pid, int sockfd, const char *buffer, size_t length)
 #endif
 		}
 
+		if( (s->txq.bytes() >= TCPInfo::wmem()) && s->event && s->epfd){
+			s->event->event &= ~(TCP_WAIT_TXQ_HALF_EMPTY);
+			if (s->event->event == 0){
+				TCPInfo::epoll_eq_erase(pid,s->epfd, s->event);
+				delete(s->event);
+				s->event = NULL;
+			}
+		}
 		return length;
 	}
 
@@ -1023,7 +1042,7 @@ TCPSocket::send(int pid, int sockfd, const char *buffer, size_t length)
 	return 0;
 }
 
-void
+int
 TCPSocket::push(int pid, int sockfd, Packet *p)
 {
 #if CLICK_STATS >= 2
@@ -1038,7 +1057,7 @@ TCPSocket::push(int pid, int sockfd, Packet *p)
 	// Check if pid exists
 	if (unlikely(!TCPInfo::pid_valid(pid))) {
 		errno = EINVAL;
-		return;
+		return -1;
 	}
 
 	// Get state
@@ -1047,7 +1066,7 @@ TCPSocket::push(int pid, int sockfd, Packet *p)
 	// Check if sockfd exists
 	if (unlikely(!s)) {
 		errno = EBADF;
-		return;
+		return -1;
 	}
 
 	// Lock state
@@ -1055,23 +1074,30 @@ TCPSocket::push(int pid, int sockfd, Packet *p)
 	// Check for pending errors
 	if (unlikely(s->error)) {
 		errno = s->error;
-		return;
+		return -1;
 	}
 
 	// Make sure push() is only allowed in certain states
 	if (unlikely(s->state != TCP_ESTABLISHED && s->state != TCP_CLOSE_WAIT)) {
 		errno = ENOTCONN;
-		return;
+		return -1;
 	}
 
 	// Effective MSS when TCP options have maximum length
 	uint16_t mss = s->snd_mss - TCPAckOptionsEncap::min_oplen(s);
 
+	//Allow push without packet to check TXQ space
+	if (!p)
+	  return (TCPInfo::wmem()-s->txq.bytes());
+	
+	int length = 0;
+	
 	// Make sure packets are not too big
 	for (Packet *q = p; q; q = q->next()) {
+		length += q->length();
 		if (q->length() > mss) {
 			errno = EMSGSIZE;
-			return;
+			return -1;
 		}
 	}
 
@@ -1085,7 +1111,7 @@ TCPSocket::push(int pid, int sockfd, Packet *p)
 #endif
 	if (ret) {
 		errno = ret;
-		return;
+		return -1;
 	}
 
 	// Insert packets into the TX queue
@@ -1114,6 +1140,15 @@ TCPSocket::push(int pid, int sockfd, Packet *p)
 	_socket->_static_calls += 1;
 	_socket->_static_cycles += delta;
 #endif
+	if( (s->txq.bytes() >= TCPInfo::wmem()) && s->event && s->epfd){
+		s->event->event &= ~(TCP_WAIT_TXQ_HALF_EMPTY);
+		if (s->event->event == 0){
+			TCPInfo::epoll_eq_erase(pid,s->epfd, s->event);
+			delete(s->event);
+			s->event = NULL;
+		}
+	}
+	return length;
 }
 
 int
@@ -1238,6 +1273,15 @@ TCPSocket::recv(int pid, int sockfd, char *buffer, size_t length)
 			l += len;
 		}
 
+		if(s->rxq.empty() && s->event && s->epfd){
+			s->event->event &= ~(TCP_WAIT_RXQ_NONEMPTY);
+			if (s->event->event == 0){
+				TCPInfo::epoll_eq_erase(pid,s->epfd, s->event);
+				delete(s->event);
+				s->event = NULL;
+			}
+		}
+			
 		return l;
 	}
 
@@ -1265,7 +1309,7 @@ TCPSocket::pull(int pid, int sockfd, int npkts)
 	click_cycles_t delta = 0;
 #endif
 	errno = 0;
-	Packet *p = NULL;
+	Packet* p = NULL;
 
 	// Check if pid exists or bad npkts
 	if (unlikely(!TCPInfo::pid_valid(pid) || npkts <= 0)) {
@@ -1380,6 +1424,15 @@ TCPSocket::pull(int pid, int sockfd, int npkts)
 			}
 		}
 
+		if(s->rxq.empty() && s->event && s->epfd){
+			s->event->event &= ~(TCP_WAIT_RXQ_NONEMPTY);
+			if (s->event->event == 0){
+				TCPInfo::epoll_eq_erase(pid,s->epfd, s->event);
+				delete(s->event);
+				s->event = NULL;
+			}
+		}
+		
 		return p;
 	}
 
@@ -1517,6 +1570,7 @@ TCPSocket::close(int pid, int sockfd)
 		// Otherwise, return "error:  connection does not exist".
 		TCPInfo::sock_put(pid, sockfd);
 
+		TCPInfo::flow_remove(s);
 
 		// Wait for a grace period and deallocate TCB
 		TCPState::deallocate(s);
@@ -1990,6 +2044,12 @@ TCPSocket::epoll_ctl(int pid, int epfd, int op, int sockfd, struct epoll_event *
 			return -1;
 		}
 
+		if ((s->event != NULL) && (s->epfd>0)){
+			TCPInfo::epoll_eq_erase(s->pid, s->epfd, s->event);
+			delete(s->event);
+			s->event = NULL;
+		}
+		
 		s->epfd = -1;
 		s->wait_event_reset();
 		// fall through
@@ -2028,17 +2088,24 @@ TCPSocket::epoll_ctl(int pid, int epfd, int op, int sockfd, struct epoll_event *
 		}
 
 		//Manage events according to flow state
+		TCPEvent* ev = NULL;
 		switch (s->state) {
 		case TCP_CLOSED: {
-			TCPEvent ev(s, TCP_WAIT_CLOSED);
+			ev = new TCPEvent(s, TCP_WAIT_CLOSED);
 			TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+			s->event = ev;
 			break;
 		}
 		case TCP_LISTEN:
 			if (in && s->wait_event_check(TCP_WAIT_ACQ_NONEMPTY)) {
 				for (int i = 0; i < s->acq_size; i++) {
-					TCPEvent ev(s, TCP_WAIT_ACQ_NONEMPTY);
-					TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+					if (!s->event){
+						ev = new TCPEvent(s, TCP_WAIT_ACQ_NONEMPTY);
+						TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+						s->event = ev;
+					}
+					else
+						s->event->event |= TCP_WAIT_ACQ_NONEMPTY;
 				}
 			}
 			break;
@@ -2046,26 +2113,47 @@ TCPSocket::epoll_ctl(int pid, int epfd, int op, int sockfd, struct epoll_event *
 		case TCP_SYN_SENT:
 		case TCP_SYN_RECV:
 			if (out && s->wait_event_check(TCP_WAIT_CON_ESTABLISHED)) {
-				TCPEvent ev(s, TCP_WAIT_CON_ESTABLISHED);
-				TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+				if (!s->event){
+					ev = new TCPEvent(s, TCP_WAIT_CON_ESTABLISHED);
+					TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+					s->event = ev;
+				}
+				else 
+					s->event->event |= TCP_WAIT_CON_ESTABLISHED;
 			}
 			break;
 				
 		case TCP_ESTABLISHED:
 		case TCP_CLOSE_WAIT:
 			if (in && s->wait_event_check(TCP_WAIT_RXQ_NONEMPTY)) {
-				TCPEvent ev(s, TCP_WAIT_RXQ_NONEMPTY);
-				TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+				if (!s->event){
+					ev = new TCPEvent(s, TCP_WAIT_RXQ_NONEMPTY);
+					TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+					s->event = ev;
+				}
+				else 
+					s->event->event |= TCP_WAIT_RXQ_NONEMPTY;
+				
 			}
 
 			if (in && s->wait_event_check(TCP_WAIT_FIN_RECEIVED)) {
-				TCPEvent ev(s, TCP_WAIT_FIN_RECEIVED);
-				TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+				if (!s->event){
+					ev = new TCPEvent(s, TCP_WAIT_FIN_RECEIVED);
+					TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+					s->event = ev;
+				}
+				else 
+					s->event->event |= TCP_WAIT_FIN_RECEIVED;
 			}
 
 			if (out && s->wait_event_check(TCP_WAIT_TXQ_HALF_EMPTY)) {
-				TCPEvent ev(s, TCP_WAIT_TXQ_HALF_EMPTY);
-				TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+				if (!s->event){
+					ev = new TCPEvent(s, TCP_WAIT_TXQ_HALF_EMPTY);
+					TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+					s->event = ev;
+				}
+				else 
+					s->event->event |= TCP_WAIT_TXQ_HALF_EMPTY;
 			}
 			break;
 
@@ -2076,14 +2164,26 @@ TCPSocket::epoll_ctl(int pid, int epfd, int op, int sockfd, struct epoll_event *
 		case TCP_LAST_ACK:
 		default:
 			// Should never happen since socket is closed
-			TCPEvent ev(s, TCP_WAIT_ERROR);
-			TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+			if (!s->event){
+				ev = new TCPEvent(s, TCP_WAIT_ERROR);
+				TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+				s->event = ev;
+			}
+			else 
+				s->event->event |= TCP_WAIT_ERROR;
 			break;
 		}
 			
 		// If an an error occoured, save state in the event queue
-		if (s->error)
-			TCPInfo::epoll_eq_insert(pid, s->epfd, TCPEvent(s, TCP_WAIT_ERROR));
+		if (s->error){
+		  	if (!s->event){
+				ev = new TCPEvent(s, TCP_WAIT_ERROR);
+				TCPInfo::epoll_eq_insert(pid, s->epfd, ev);
+				s->event = ev;
+			}
+			else
+				s->event->event |= TCP_WAIT_ERROR;
+		}
 
 		break;
 	}
@@ -2094,6 +2194,12 @@ TCPSocket::epoll_ctl(int pid, int epfd, int op, int sockfd, struct epoll_event *
 			return -1;
 		}
 
+		if ((s->event != NULL) && (s->epfd>0)){
+			TCPInfo::epoll_eq_erase(s->pid, s->epfd, s->event);
+			delete(s->event);
+			s->event = NULL;
+		}
+		
 		s->epfd = -1;
 		s->wait_event_reset();
 		break;
@@ -2164,39 +2270,57 @@ TCPSocket::epoll_wait(int pid, int epfd, struct epoll_event *events, int maxeven
 # endif					   
 	} while (timeout != 0);
 
-	while (TCPInfo::epoll_eq_size(pid, epfd) > 0 && ret < maxevents) {
-		TCPEvent ev = TCPInfo::epoll_eq_remove(pid, epfd);
-		TCPState *s = ev.state;
+	
+	//TODO Do not remove from event queue. It will be removed when the condition does not apply anymore (e.g., when executing recv, push, pull, send, etc. )... 
+	TCPEventQueue::iterator it = TCPInfo::epoll_eq_begin(pid, epfd);
+	TCPEventQueue::iterator e = TCPInfo::epoll_eq_end(pid, epfd);
+	while ( it!=e && ret < maxevents) {
+		TCPEvent* evnt = &(*it);
+		TCPState *s = evnt->state;
 		click_assert(s);
 
 		// Check event and set returning mask accordingly
-		switch (ev.event) {
-		case TCP_WAIT_CLOSED:
-			events[ret].events = EPOLLHUP;
-			events[ret].data.fd = s->sockfd;
-			ret++;
-			break;
+		events[ret].events = 0;
+		int ev = evnt->event;
+		while (ev) {
+			// Check one event at a time
+			int e = ((ev & (ev - 1)) == 0 ? ev : 1 << (ffs_lsb((unsigned)ev) - 1));
+			switch (e) {
+				case TCP_WAIT_CLOSED:
+					events[ret].events |= EPOLLHUP;
+					events[ret].data.fd = s->sockfd;
+					break;
 
-		case TCP_WAIT_FIN_RECEIVED:
-		case TCP_WAIT_RXQ_NONEMPTY:
-		case TCP_WAIT_ACQ_NONEMPTY:
-			events[ret].events = EPOLLIN;
-			events[ret].data.fd = s->sockfd;
-			ret++;
-			break;
+				case TCP_WAIT_FIN_RECEIVED:
+				case TCP_WAIT_RXQ_NONEMPTY:
+				case TCP_WAIT_ACQ_NONEMPTY:
+					events[ret].events |= EPOLLIN;
+					break;
 
-		case TCP_WAIT_TXQ_HALF_EMPTY:
-		case TCP_WAIT_CON_ESTABLISHED:
-			events[ret].events = EPOLLOUT;
-			events[ret].data.fd = s->sockfd;
-			ret++;
-			break;
+				case TCP_WAIT_TXQ_HALF_EMPTY:
+				case TCP_WAIT_CON_ESTABLISHED:
+					events[ret].events |= EPOLLOUT;
+					break;
 
-		default:
-			events[ret].events = EPOLLERR;
-			events[ret].data.fd = s->sockfd;
-			ret++;
-			break;
+				case TCP_WAIT_ERROR:
+					events[ret].events |= EPOLLERR;
+					break;
+				}
+			// Toogle event bit off
+			ev ^= e;
+		}
+		events[ret].data.fd = s->sockfd;
+		ret++;
+		it++;
+		
+		//Clean one-shot events
+		evnt->event &= ~(TCP_WAIT_FIN_RECEIVED | TCP_WAIT_CON_ESTABLISHED); 
+		
+		//If no other elements, remove from event queue
+		if (evnt->event == 0){
+			TCPInfo::epoll_eq_erase(pid, epfd, evnt);
+			s->event = NULL;
+			delete(evnt);
 		}
 	}
 
@@ -2233,7 +2357,18 @@ TCPSocket::epoll_close(int pid, int epfd)
 		errno = EBADF;
 		return -1;
 	}
-
+	
+	//Clean TCPEvent queue and TCPStates associated
+	TCPEventQueue::iterator it = TCPInfo::epoll_eq_begin(pid, epfd);
+	TCPEventQueue::iterator e = TCPInfo::epoll_eq_end(pid, epfd);
+	while ( it!=e ){
+		TCPEvent* evnt = &(*it);
+		TCPInfo::epoll_eq_erase(pid, epfd, evnt);
+		evnt->state->event = NULL;
+		evnt->state->epfd = -1;
+		delete(evnt);
+	}
+	
 	// Close epfd
 	TCPInfo::epoll_fd_put(pid, epfd);
 

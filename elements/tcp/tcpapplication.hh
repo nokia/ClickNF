@@ -52,7 +52,7 @@ class TCPApplication : public Element { public:
 	inline int click_fsync(int sockfd);
 
 	// Zero-copy (ZC) API
-	inline void click_push(int sockfd, Packet *p);
+	inline int click_push(int sockfd, Packet *p);
 	inline Packet *click_pull(int sockfd, int npkts = 1);
 	
 	//State modifications
@@ -85,7 +85,6 @@ class TCPApplication : public Element { public:
 	int _pid;
 	static int pid_counter;
 };
-
 
 inline int
 TCPApplication::click_socket(int domain, int type, int protocol)
@@ -163,7 +162,7 @@ TCPApplication::click_fsync(int sockfd)
 	return TCPSocket::fsync(_pid, sockfd);
 }
 
-inline void
+inline int
 TCPApplication::click_push(int sockfd, Packet *p)
 {
 	TCPSocket::push(_pid, sockfd, p);

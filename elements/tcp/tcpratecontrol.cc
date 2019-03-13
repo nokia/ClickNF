@@ -48,7 +48,7 @@ TCPRateControl::push(int, Packet *p)
 	// If TX queue is empty or window is small, do not send any data. 
 	if (s->txq.empty() || s->available_tx_window() < s->snd_mss) {
 		if (TCP_ACK_FLAG_ANNO(p))  //Send empty packet if ACK REQUIRED flag set.
-			output(0).push(p); 
+			output(0).push(p);
 		else	
 			p->kill(); //TODO Should we properly send Probe packet? Probing Zero Windows: RFC-1122 Section 4.2.2.17 and RFC-793 Section 3.7.
 		return;
@@ -59,8 +59,8 @@ TCPRateControl::push(int, Packet *p)
 
 	// Get TX queue state
 	bool txq_non_empty = !s->txq.empty();
-//	bool txq_half_full = (s->txq.bytes() > (s->wmem >> 1));
-	bool txq_half_full = (s->txq.bytes() > (TCPInfo::wmem() >> 1));
+//	bool txq_half_full = (s->txq.bytes() > (TCPInfo::wmem() >> 1));
+	bool txq_half_full = (s->txq.bytes() < (TCPInfo::wmem()));
 
 	// Keep sending until empty TX queue or small window
 	while (!s->txq.empty() && s->available_tx_window() >= s->snd_mss) {
@@ -88,7 +88,7 @@ TCPRateControl::push(int, Packet *p)
 
 	// Wake up user task if waiting for space in the TX queue
 //	if (txq_half_full && s->txq.bytes() <= (s->wmem >> 1))
-	if (txq_half_full && s->txq.bytes() <= (TCPInfo::wmem() >> 1))
+	if (txq_half_full && s->txq.bytes() < (TCPInfo::wmem()))
 		s->wake_up(TCP_WAIT_TXQ_HALF_EMPTY);
 
 //	s->lock.release();

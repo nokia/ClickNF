@@ -83,7 +83,8 @@ TCPState::TCPState(const IPFlowID &f)
 #if HAVE_TCP_KEEPALIVE
     snd_keepalive_count(0),
 #endif
-    snd_rtx_count(0)
+    snd_rtx_count(0),
+    event(NULL)
 {
 }
 
@@ -108,7 +109,7 @@ TCPState::allocate()
 void
 TCPState::deallocate(TCPState *s)
 {
-	unsigned c = click_current_cpu_id();
+    unsigned c = click_current_cpu_id();
     if (pool[c])
 		pool[c]->deallocate(s);
 }
@@ -218,8 +219,14 @@ void
 TCPState::notify_error(int e)
 {
 	error = e;
-	if (epfd > 0)
-		TCPInfo::epoll_eq_insert(pid, epfd, TCPEvent(this, TCP_WAIT_ERROR));
+	if (epfd > 0){
+		if (event == NULL){
+			event = new TCPEvent(this, TCP_WAIT_ERROR);
+			TCPInfo::epoll_eq_insert(pid, epfd, event);
+		}
+		else	
+		    event->event |= TCP_WAIT_ERROR;
+	}
 
 	// Wake up if task is sleeping
 	if (!task->scheduled())
@@ -227,12 +234,22 @@ TCPState::notify_error(int e)
 }
 
 void
-TCPState::wake_up(int event)
+TCPState::wake_up(int ev)
 {
 	// Wake up task, if waiting for this event
-	if (wait & event) {
-		if (epfd > 0)
-			TCPInfo::epoll_eq_insert(pid, epfd, TCPEvent(this, event));
+	if (wait & ev) {
+		if (epfd > 0){
+			//If event requires to be treaded by epoll 
+			if (ev | (TCP_WAIT_CLOSED | TCP_WAIT_FIN_RECEIVED | TCP_WAIT_RXQ_NONEMPTY | TCP_WAIT_ACQ_NONEMPTY | TCP_WAIT_TXQ_HALF_EMPTY | TCP_WAIT_CON_ESTABLISHED) ){
+				if (event == NULL){
+					event = new TCPEvent(this, ev);
+					TCPInfo::epoll_eq_insert(pid, epfd, event);
+				}
+				else
+					event->event |= ev;
+			}
+		}
+		
 		if (!task->scheduled())
 			task->reschedule();
 	}
@@ -265,7 +282,7 @@ TCPState::wait_event_check(int ev)
 			break;
 
 		case TCP_WAIT_TXQ_HALF_EMPTY:
-			cond |= (txq.bytes() <= (TCPInfo::wmem() >> 1));
+			cond |= (txq.bytes() < TCPInfo::wmem());
 			break;
 
 		case TCP_WAIT_RXQ_NONEMPTY:

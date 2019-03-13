@@ -42,6 +42,7 @@
 #include "tcplist.hh"
 #include "tcpbuffer.hh"
 #include "tcptimer.hh"
+#include "tcpeventqueue.hh"
 #include "util.hh"
 CLICK_DECLS
 
@@ -98,7 +99,7 @@ class TCPState { public:
 	int wait_event(int event);
 	bool wait_event_check(int event);
 	inline void wait_event_set(int event) { wait |= event; }
-	inline void wait_event_reset() { wait = TCP_WAIT_NOTHING; }
+	inline void wait_event_reset() { wait = TCP_WAIT_NOTHING;} //NOTE Might neet to clean active events here... TCPInfo::epoll_eq_erase(pid,epfd, event); free(event);}
 	void wake_up(int event);
 	void notify_error(int);
 
@@ -211,7 +212,8 @@ class TCPState { public:
 		 unused9:1,
 	         unused10:1;
 
-	char padding[7];
+	TCPEvent* event; 
+
 	TCPTimer rtx_timer; //CLICK_ALIGNED(CLICK_CACHE_LINE_SIZE);
 #if HAVE_TCP_KEEPALIVE
 	TCPTimer keepalive_timer; //CLICK_ALIGNED(CLICK_CACHE_LINE_SIZE);

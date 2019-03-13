@@ -123,7 +123,7 @@ class TCPSocket final : public Element { public:
 	static int getsockopt(int pid, int sockfd, int level, int optname, const void *optval, socklen_t optlen);
 
 	// Zero-copy API
-	static void push(int pid, int sockfd, Packet *p);
+	static int push(int pid, int sockfd, Packet *p);
 	static Packet *pull(int pid, int sockfd, int npkts = 1);
 	
 	//State modifications
