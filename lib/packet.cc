@@ -1511,7 +1511,7 @@ Packet::static_initialize()
 	int t = rte_lcore_index(lcore_id);
 	mempool[t] = rte_mempool_create(
 	                (String("POOL_") + t).c_str(),           // name
-	                64 * 512 - 1,                          // pool size
+	                64 * 1024 - 1,                          // pool size
 	                size,                                    // element size
 	                RTE_MEMPOOL_CACHE_MAX_SIZE,              // cache size
 	                sizeof(struct rte_pktmbuf_pool_private), // priv size
@@ -1534,7 +1534,7 @@ Packet::static_initialize()
 	int t = rte_lcore_index(lcore_id);
 	mempool[t] = rte_pktmbuf_pool_create(
 				    (String("POOL_") + t).c_str(),      // name
-				    64 * 512 - 1,                     // pool size
+				    64 * 1024 - 1,                     // pool size
 		                    RTE_MEMPOOL_CACHE_MAX_SIZE,         // cache size
 		                    0,                                  // priv size
 		                    data_room_size,                     // data size
