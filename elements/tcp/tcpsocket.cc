@@ -1051,8 +1051,8 @@ TCPSocket::push(int pid, int sockfd, Packet *p)
 #endif
 	errno = 0;
 
-	// Make sure we are running in user context and packet exists
-	click_assert(current && p);
+	// Make sure we are running in user context
+	click_assert(current);
 
 	// Check if pid exists
 	if (unlikely(!TCPInfo::pid_valid(pid))) {
@@ -1769,8 +1769,9 @@ TCPSocket::close(int pid, int sockfd)
 #if CLICK_STATS >= 2
 			start_cycles = click_get_cycles() ;
 #endif
-			// Reset sockfd
-			s->sockfd = -1;
+		
+			//Cannot receive events on the socket anymore. Just waitinh timeout o expire
+			s->epfd = 0;
 		}
 
 		break;
@@ -2247,6 +2248,10 @@ TCPSocket::epoll_wait(int pid, int epfd, struct epoll_event *events, int maxeven
 	}
 
 	do {
+		// Let other tasks run. NOTE This is needed because epoll queue may remain full and never yeld.
+		current->fast_reschedule();
+		current->yield(true);
+
 		// If there is at least one event or zero timeout, return
 		if (TCPInfo::epoll_eq_size(pid, epfd) > 0 || timeout == 0)
 			break;
@@ -2314,7 +2319,7 @@ TCPSocket::epoll_wait(int pid, int epfd, struct epoll_event *events, int maxeven
 		it++;
 		
 		//Clean one-shot events
-		evnt->event &= ~(TCP_WAIT_FIN_RECEIVED | TCP_WAIT_CON_ESTABLISHED); 
+		evnt->event &= ~(TCP_WAIT_FIN_RECEIVED | TCP_WAIT_CON_ESTABLISHED | TCP_WAIT_ERROR); 
 		
 		//If no other elements, remove from event queue
 		if (evnt->event == 0){
