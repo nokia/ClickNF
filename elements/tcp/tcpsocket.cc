@@ -2156,6 +2156,11 @@ TCPSocket::epoll_ctl(int pid, int epfd, int op, int sockfd, struct epoll_event *
 				else 
 					s->event->event |= TCP_WAIT_TXQ_HALF_EMPTY;
 			}
+			
+			//if an event has been added to the event queue and task exist, schedule blocked Blocking Task 
+			if ((s->event) && (s->task) && (!s->task->scheduled()))
+				s->task->reschedule();
+
 			break;
 
 		case TCP_FIN_WAIT1:
