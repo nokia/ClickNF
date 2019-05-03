@@ -1770,9 +1770,13 @@ TCPSocket::close(int pid, int sockfd)
 			start_cycles = click_get_cycles() ;
 #endif
 		
-			//Cannot receive events on the socket anymore. Just waitinh timeout o expire
-			s->epfd = 0;
 		}
+
+		//Cannot receive events on the socket anymore. Just waiting timeout o expire
+		if (s->epfd)
+			epoll_ctl(s->pid, s->epfd, EPOLL_CTL_DEL, sockfd, NULL);
+
+		s->epfd = -1;
 
 		break;
 	  
