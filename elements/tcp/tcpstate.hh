@@ -1,8 +1,8 @@
 /*
  * tcpstate.{cc,hh} -- the TCP state
- * Rafael Laufer, Massimo Gallo
+ * Rafael Laufer, Massimo Gallo, Myriana Rifai
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2019 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -36,6 +36,8 @@
 #include <clicknet/tcp.h>
 #include <clicknet/tcp.hh>
 #include <clicknet/ether.h>
+#include "bbr/bbrstate.hh"
+#include "bbr/ratesample.hh"
 #include "tcphashallocator.hh"
 #include "pktqueue.hh"
 #include "blockingtask.hh"
@@ -47,6 +49,8 @@
 CLICK_DECLS
 
 class TCPFlowTable;
+class BBRState;
+class RateSample;
 
 const uint8_t TCP_CLOSED      =  0;
 const uint8_t TCP_LISTEN      =  1;
@@ -103,6 +107,7 @@ class TCPState { public:
 	void wake_up(int event);
 	void notify_error(int);
 
+	inline uint32_t tcp_packets_in_flight();
 	inline void acq_push_back(TCPState *s);
 	inline void acq_erase(TCPState *s);
 	inline void acq_detach();
@@ -198,6 +203,49 @@ class TCPState { public:
 	int flags; // NOTE: NONBLOCK is in reality a FD flag (O_RDWR)	
 	int error;
 
+		/**
+	 * DCTCP state variables
+	 */
+	double alpha = 1;
+	uint32_t bytes_acked = 0;
+	uint32_t window_end = snd_una;
+	uint32_t bytes_marked = 0;
+	double gain = 0.0625;
+	bool ce = false;
+	/**
+	 * END DCTCP
+	 */
+
+	/**
+	 * BBR state variable
+	 */
+#define BBR_ENABLED 1
+#define TCPCB_SACKED_ACKED	0x01	/* SKB ACK'd by a SACK block	*/
+#define TCPCB_SACKED_RETRANS	0x02	/* SKB retransmitted		*/
+#define TCPCB_LOST		0x04	/* SKB is lost			*/
+#define TCPCB_TAGBITS		0x07	/* All tag bits			*/
+#define TCPCB_REPAIRED		0x10	/* SKB repaired (no skb_mstamp_ns)	*/
+#define TCPCB_EVER_RETRANS	0x80	/* Ever retransmitted frame	*/
+#define TCPCB_RETRANS		(TCPCB_SACKED_RETRANS|TCPCB_EVER_RETRANS| \
+				TCPCB_REPAIRED)
+#if BBR_ENABLED
+	uint32_t 	delivered,
+				rate_delivered,
+				rate_app_limited,
+				app_limited,
+				last_rtt;
+	uint64_t 	delivered_ustamp,
+				rate_interval_us,
+				first_sent_time;
+	uint8_t		sacked:1;
+	RateSample *rs;
+	BBRState *bbr;
+	uint64_t next_send_time = 0;
+	TCPTimer tx_timer;
+#endif
+	/**
+	 * End BBR state variable
+	 */
 #if HAVE_TCP_KEEPALIVE
 	uint16_t  snd_keepalive_count;       // number of keepalives without ACK
 #endif
@@ -227,6 +275,10 @@ class TCPState { public:
 	static TCPState *allocate();
 	static void deallocate(TCPState *);
 };/* CLICK_ALIGNED(CLICK_CACHE_LINE_SIZE);*/ //NOTE causes seg. fault in initialization of a state after TCPInfo::allocate()
+
+inline uint32_t TCPState::tcp_packets_in_flight(){
+	 return rtxq.packets() - snd_rtx_count - rxb.sack().blocks() -rxq.packets();
+}
 
 inline void
 TCPState::acq_push_back(TCPState *s)

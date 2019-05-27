@@ -2,7 +2,7 @@
 // |                   Vars and elems definitions                    |
 // -------------------------------------------------------------------
 
-require(library test-tcp-layer2.click)
+require(library general-tcp.click)
 
 define($DEV0 eth1, $ADDR0 10.0.0.1, $MAC0 aa:aa:aa:aa:aa:aa)
 define($DEV1 eth2, $ADDR1 10.0.1.1, $MAC1 bb:bb:bb:bb:bb:bb)

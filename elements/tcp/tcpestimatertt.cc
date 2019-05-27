@@ -1,8 +1,8 @@
 /*
  * tcpestimatertt.{cc,hh} -- Estimate round-trip time (RTT)
- * Rafael Laufer, Massimo Gallo
+ * Rafael Laufer, Massimo Gallo, Myriana Rifai
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2019 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -138,6 +138,9 @@ TCPEstimateRTT::smaction(Packet *p)
 	//  (2.5) A maximum value MAY be placed on RTO provided it is at least 60
 	//        seconds.
 
+#if BBR_ENABLED
+	s->last_rtt = rtt;
+#endif
 	uint32_t rto;
 	if (unlikely(s->snd_srtt == 0)) {
 		s->snd_srtt = rtt;

@@ -1,8 +1,8 @@
 /*
- * util.{cc,hh} -- generic functions
- * Rafael Laufer, Massimo Gallo, Myriana Rifai
+ * tcpclassifier.{cc,hh} -- tcp classifier
+ * Myriana Rifai
  *
- * Copyright (c) 2019 Nokia Bell Labs
+ * Copyright (c) 2018 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -22,53 +22,37 @@
  *
  *
  */
+#include <click/config.h>
+#include <click/error.hh>
+#include <click/args.hh>
+#include "tcpinfo.hh"
+#include "tcpclassifier.hh"
+CLICK_DECLS
 
-#ifndef CLICK_UTIL_HH
-#define CLICK_UTIL_HH
 
-#include <click/string.hh>
-#include <linux/types.h>
-
-#define MIN(a,b)     (((a) < (b)) ?    (a)    :    (b))
-#define MAX(a,b)     (((a) > (b)) ?    (a)    :    (b))
-#define absdiff(a,b) (((a) > (b)) ? ((a)-(b)) : ((b)-(a)))
-#define mod(a,b)     (a-((a/b)*b))
-
-int get_shift(String &s);
-
-inline void prefetch0(const volatile void *p) {
-	asm volatile ("prefetcht0 %[p]" : : [p] "m" (*(const volatile char*)p));
-}
-
-#ifndef MINMAX_H
-#define MINMAX_H
-
-/* A single data point for our parameterized min-max tracker */
-struct minmax_sample {
-	uint32_t	t;	/* time measurement was taken */
-	uint32_t	v;	/* value measured */
-};
-
-/* State for the parameterized min-max tracker */
-struct minmax {
-	struct minmax_sample s[3];
-};
-
-static inline uint32_t minmax_get(const struct minmax *m)
+TCPClassifier::TCPClassifier()
 {
-	return m->s[0].v;
 }
 
-static inline uint32_t minmax_reset(struct minmax *m, uint32_t t, uint32_t meas)
+void
+TCPClassifier::push(int, Packet *p)
 {
-	struct minmax_sample val = { t,  meas };
-	m->s[2] = m->s[1] = m->s[0] = val;
 
-	return m->s[0].v;
-}
+		switch(TCPInfo::cong_control()){
+		case 0: // NewReno
+			output(0).push(p);
+			break;
+		case 1: // DCTCP
+			output(1).push(p);
+			break;
+		case 2: // BBR
+			output(2).push(p);
+			break;
+		default:
+			break;
+		}
+	}
 
-uint32_t minmax_running_max(struct minmax *m, uint32_t win, uint32_t t, uint32_t meas);
-uint32_t minmax_running_min(struct minmax *m, uint32_t win, uint32_t t, uint32_t meas);
 
-#endif
-#endif
+CLICK_ENDDECLS
+EXPORT_ELEMENT(TCPClassifier)

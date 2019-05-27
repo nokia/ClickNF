@@ -1,8 +1,8 @@
 /*
  * tcpnewrenosyn.{cc,hh} -- initialize congestion control (RFCs 5681/6582)
- * Massimo Gallo, Rafael Laufer
+ * Massimo Gallo, Rafael Laufer, Myriana Rifai
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2019 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -64,6 +64,10 @@ TCPNewRenoSyn::smaction(Packet *p)
 	// Force initial window to be equal to 10 SMSS
 	s->snd_cwnd = 10*s->snd_mss;
 
+	// set the value of initial cwnd
+#ifdef BBR_ENABLED
+	s->bbr->initial_cwnd = s->snd_cwnd;
+#endif
 	// The initial value of ssthresh SHOULD be set arbitrarily high (e.g.,
 	// to the size of the largest possible advertised window), but ssthresh
 	// MUST be reduced in response to congestion.

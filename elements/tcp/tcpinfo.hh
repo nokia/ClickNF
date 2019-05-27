@@ -1,8 +1,8 @@
 /*
  * tcpinfo.hh -- TCP information used in multiple modules
- * Rafael Laufer, Massimo Gallo
+ * Rafael Laufer, Massimo Gallo, Myriana Rifai
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2019 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -65,7 +65,8 @@ class TCPInfo final : public Element { public:
 	static inline void inc_usr_sockets(int);
 	static inline void dec_usr_sockets(int);
 	static inline const Vector<IPAddress> &addr();
-	
+	static inline uint32_t cong_control();
+
 #if HAVE_ALLOW_EPOLL	
 	typedef TCPTable<TCPEventQueue *> EpollTableThread;
 	typedef EpollTableThread* EpollTable;
@@ -128,6 +129,7 @@ class TCPInfo final : public Element { public:
 	static SockTable _sockTable;
 	static SockFDesc _sockFDesc;
 	static uint32_t _nthreads;
+	static uint32_t _cong_control;
 #if HAVE_ALLOW_EPOLL
 	static EpollTable _epollTable;
 	static EpollFDesc _epollFDesc;
@@ -205,6 +207,11 @@ inline const Vector<IPAddress> &
 TCPInfo::addr()
 {
 	return _addr;
+}
+
+inline uint32_t TCPInfo::cong_control()
+{
+	return _cong_control;
 }
 
 inline TCPState *

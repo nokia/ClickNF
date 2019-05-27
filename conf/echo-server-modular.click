@@ -1,4 +1,4 @@
-require(library test-tcp-layer2.click)
+require(library general-tcp.click)
 
 define($DEV0 iface, $ADDR0 10.0.20.2, $MAC0 bb:bb:bb:bb:bb:bb)
 AddressInfo($DEV0 $ADDR0 $MAC0);

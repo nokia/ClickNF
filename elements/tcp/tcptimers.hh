@@ -1,8 +1,8 @@
 /*
  * tcptimers.{cc,hh} -- TCP timers
- * Rafael Laufer
+ * Rafael Laufer, Myriana Rifai
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2019 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -36,13 +36,14 @@ CLICK_DECLS
 #define TCP_TIMERS_OUT_RTX 0  // Retransmission
 #define TCP_TIMERS_OUT_KAL 1  // Keep-alive
 #define TCP_TIMERS_OUT_ACK 2  // Delayed ACK
+#define TCP_TIMERS_OUT_PACING  3
 
 class TCPTimers final : public Element { public:
 
 	TCPTimers() CLICK_COLD;
 
 	const char *class_name() const { return "TCPTimers"; }
-	const char *port_count() const { return "0/3"; }
+	const char *port_count() const { return "0/4"; }
 	const char *processing() const { return PUSH; }
 
 	int configure(Vector<String> &, ErrorHandler *) CLICK_COLD;
@@ -52,6 +53,9 @@ class TCPTimers final : public Element { public:
   private:
 
 	static void rtx_timer_hook(TCPTimer *, void *);
+#if BBR_ENABLED
+	static void tx_timer_hook(TCPTimer *, void *);
+#endif
 	static void tw_timer_hook(TCPTimer *, void *);
 #if HAVE_TCP_DELAYED_ACK
 	static void delayed_ack_timer_hook(TCPTimer *, void *);
@@ -65,6 +69,7 @@ class TCPTimers final : public Element { public:
 	friend class TCPSocket;
 	friend class TCPListen;
 	friend class TCPProcessAck;
+	friend class DCTCPProcessAck;
 	friend class TCPProcessFin;
 	friend class TCPProcessPkt;
 };

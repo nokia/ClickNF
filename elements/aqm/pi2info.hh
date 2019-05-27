@@ -1,6 +1,6 @@
 /*
- * util.{cc,hh} -- generic functions
- * Rafael Laufer, Massimo Gallo, Myriana Rifai
+ * pi2info.hh -- pi2 double queueing information 
+ * Myriana Rifai
  *
  * Copyright (c) 2019 Nokia Bell Labs
  *
@@ -23,52 +23,63 @@
  *
  */
 
-#ifndef CLICK_UTIL_HH
-#define CLICK_UTIL_HH
+#ifndef CLICK_PI2INFO_HH
+#define CLICK_PI2INFO_HH
+#include <click/element.hh>
+#include <click/master.hh>
+CLICK_DECLS
 
-#include <click/string.hh>
-#include <linux/types.h>
+class PI2Info final : public Element { public:
 
-#define MIN(a,b)     (((a) < (b)) ?    (a)    :    (b))
-#define MAX(a,b)     (((a) > (b)) ?    (a)    :    (b))
-#define absdiff(a,b) (((a) > (b)) ? ((a)-(b)) : ((b)-(a)))
-#define mod(a,b)     (a-((a/b)*b))
+	PI2Info() CLICK_COLD;
 
-int get_shift(String &s);
+	const char *class_name() const	{ return "PI2Info"; }
+	int configure_phase() const		{ return CONFIGURE_PHASE_FIRST; }
 
-inline void prefetch0(const volatile void *p) {
-	asm volatile ("prefetcht0 %[p]" : : [p] "m" (*(const volatile char*)p));
-}
+	// Pi2 Queues info API
+	static inline bool verbose();
+	static inline uint32_t get_cqtime();
+    static inline void set_cqtime(uint32_t);
+	static inline uint32_t get_lqtime();
+    static inline void set_lqtime(uint32_t);
+	
+  private:
 
-#ifndef MINMAX_H
-#define MINMAX_H
+	static bool _verbose;
+	static uint32_t _cqtime;
+	static uint32_t _lqtime;
 
-/* A single data point for our parameterized min-max tracker */
-struct minmax_sample {
-	uint32_t	t;	/* time measurement was taken */
-	uint32_t	v;	/* value measured */
 };
 
-/* State for the parameterized min-max tracker */
-struct minmax {
-	struct minmax_sample s[3];
-};
-
-static inline uint32_t minmax_get(const struct minmax *m)
+inline bool
+PI2Info::verbose()
 {
-	return m->s[0].v;
+	return _verbose;
 }
 
-static inline uint32_t minmax_reset(struct minmax *m, uint32_t t, uint32_t meas)
+inline uint32_t
+PI2Info::get_cqtime()
 {
-	struct minmax_sample val = { t,  meas };
-	m->s[2] = m->s[1] = m->s[0] = val;
-
-	return m->s[0].v;
+	return _cqtime;
 }
 
-uint32_t minmax_running_max(struct minmax *m, uint32_t win, uint32_t t, uint32_t meas);
-uint32_t minmax_running_min(struct minmax *m, uint32_t win, uint32_t t, uint32_t meas);
+inline void
+PI2Info::set_cqtime(uint32_t cqtime)
+{
+	_cqtime = cqtime;
+}
 
-#endif
+inline uint32_t
+PI2Info::get_lqtime()
+{
+	return _lqtime;
+}
+
+inline void
+PI2Info::set_lqtime(uint32_t lqtime)
+{
+	_lqtime = lqtime;
+}
+
+CLICK_ENDDECLS
 #endif

@@ -29,6 +29,7 @@
 #include <click/error.hh>
 #include <clicknet/ip.h>
 #include <clicknet/tcp.h>
+#include <click/tcpanno.hh>
 #include "tcpencap.hh"
 CLICK_DECLS
 

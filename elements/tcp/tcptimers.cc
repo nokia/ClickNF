@@ -1,8 +1,8 @@
 /*
  * tcptimers.{cc,hh} -- TCP timers
- * Rafael Laufer
+ * Rafael Laufer, Myriana Rifai
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2019 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -34,13 +34,10 @@ CLICK_DECLS
 
 TCPTimers *TCPTimers::_t = NULL;
 
-TCPTimers::TCPTimers()
-{
+TCPTimers::TCPTimers() {
 }
 
-int
-TCPTimers::configure(Vector<String> &, ErrorHandler *errh)
-{
+int TCPTimers::configure(Vector<String> &, ErrorHandler *errh) {
 	if (_t)
 		return errh->error("TCPTimers can only be configured once");
 
@@ -49,10 +46,7 @@ TCPTimers::configure(Vector<String> &, ErrorHandler *errh)
 	return 0;
 }
 
-
-void
-TCPTimers::rtx_timer_hook(TCPTimer *t, void *data)
-{
+void TCPTimers::rtx_timer_hook(TCPTimer *t, void *data) {
 	// RFC 6298:
 	// "When the retransmission timer expires, do the following:
 	//
@@ -75,7 +69,6 @@ TCPTimers::rtx_timer_hook(TCPTimer *t, void *data)
 
 	TCPState *s = reinterpret_cast<TCPState *>(data);
 	click_assert(s && !s->rtxq.empty());
-
 	// Head-of-line (HOL) packet
 	Packet *q = s->rtxq.front();
 
@@ -123,12 +116,34 @@ TCPTimers::rtx_timer_hook(TCPTimer *t, void *data)
 		// Send retransmission
 		_t->output(TCP_TIMERS_OUT_RTX).push(p);
 	}
- 	// too many retransmissions
+	// too many retransmissions
 	else {
 		if (TCPInfo::verbose())
 			click_chatter("%s: rtx limit reached", _t->class_name());
 
 		s->notify_error(ETIMEDOUT);
+	}
+}
+
+void TCPTimers::tx_timer_hook(TCPTimer *t, void *data) {
+	TCPState *s = reinterpret_cast<TCPState *>(data);
+	click_assert(s);
+	// Head-of-line (HOL) packet
+	Packet *q = s->bbr->pcq.front();
+	if (q) {
+		// Send packet
+		s->bbr->pcq.pop_front();
+		if (s->bbr->pacing_rate)
+        	    s->next_send_time = (uint64_t) Timestamp::now_steady().usecval()
+				+ (uint32_t) (q->seg_len() * 1000000 / s->bbr->pacing_rate);
+	        else
+	            s->next_send_time = (uint64_t) Timestamp::now_steady().usecval();
+		q->set_next(NULL);
+		q->set_prev(NULL);
+		_t->output(TCP_TIMERS_OUT_PACING).push(q);
+		t->reschedule_after_msec(
+				 (uint64_t)(s->next_send_time
+						- (uint64_t) Timestamp::now_steady().usecval())/1000);
 	}
 }
 
@@ -146,8 +161,7 @@ TCPTimers::keepalive_timer_hook(TCPTimer *t, void *data)
 
 	if (++s->snd_keepalive_count <= TCP_KEEPALIVE_MAX) {
 		if (TCPInfo::verbose())
-			click_chatter("%s: keepalive timeout", _t->class_name());
-
+		click_chatter("%s: keepalive timeout", _t->class_name());
 
 		t->reschedule_after_msec(TCP_KEEPALIVE);
 
@@ -159,7 +173,7 @@ TCPTimers::keepalive_timer_hook(TCPTimer *t, void *data)
 	// too many keepalives lost
 	else {
 		if (TCPInfo::verbose())
-			click_chatter("%s: keepalive limit reached", _t->class_name());
+		click_chatter("%s: keepalive limit reached", _t->class_name());
 
 		s->notify_error(ETIMEDOUT);
 	}
@@ -167,9 +181,7 @@ TCPTimers::keepalive_timer_hook(TCPTimer *t, void *data)
 #endif
 
 #if HAVE_TCP_DELAYED_ACK
-void
-TCPTimers::delayed_ack_timer_hook(TCPTimer *, void *data)
-{
+void TCPTimers::delayed_ack_timer_hook(TCPTimer *, void *data) {
 	TCPState *s = reinterpret_cast<TCPState *>(data);
 	click_assert(s);
 //	s->lock.acquire();
@@ -179,14 +191,12 @@ TCPTimers::delayed_ack_timer_hook(TCPTimer *, void *data)
 
 	Packet *p = Packet::make(TCP_HEADROOM, NULL, 0, 0);
 	click_assert(p);
-	SET_TCP_STATE_ANNO(p, (uint64_t)s);
+	SET_TCP_STATE_ANNO(p, (uint64_t )s);
 	_t->output(TCP_TIMERS_OUT_ACK).push(p);
 }
 #endif
 
-void
-TCPTimers::tw_timer_hook(TCPTimer *, void *data)
-{
+void TCPTimers::tw_timer_hook(TCPTimer *, void *data) {
 	TCPState *s = reinterpret_cast<TCPState *>(data);
 	click_assert(s);
 //	s->lock.acquire();

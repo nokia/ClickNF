@@ -1,8 +1,8 @@
 /*
  * tcpsocket.{cc,hh} -- TCP socket API
- * Rafael Laufer, Massimo Gallo
+ * Rafael Laufer, Massimo Gallo, Myriana Rifai
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2018 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -808,6 +808,10 @@ TCPSocket::connect(int pid, int sockfd, IPAddress daddr, uint16_t dport)
 	s->rtx_timer.assign(TCPTimers::rtx_timer_hook, s);
 	s->rtx_timer.initialize(TCPTimers::element(), c);
 
+	if (TCPInfo::cong_control() == 2){
+		s->tx_timer.assign(TCPTimers::tx_timer_hook, s);
+		s->tx_timer.initialize(TCPTimers::element(), c);
+	}
 #if HAVE_TCP_KEEPALIVE
 	s->keepalive_timer.assign(TCPTimers::keepalive_timer_hook, s);
 	s->keepalive_timer.initialize(TCPTimers::element(), c);
@@ -1100,6 +1104,9 @@ TCPSocket::push(int pid, int sockfd, Packet *p)
 			return -1;
 		}
 	}
+
+	if (TCPInfo::cong_control() == 2)
+		s->rs->rate_check_app_limited(s);
 
 #if CLICK_STATS >= 2
 	delta += (click_get_cycles() - start_cycles);

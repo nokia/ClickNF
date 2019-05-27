@@ -1,8 +1,8 @@
 /*
- * tcpackencap.{cc,hh} -- encapsulates packet with a TCP header with ACK set
- * Rafael Laufer, Massimo Gallo, Myriana Rifai
+ * bbrtcppacing.{cc,hh} -- schedules packets to be transmitted following pacing_rate
+ * Myriana Rifai
  *
- * Copyright (c) 2019 Nokia Bell Labs
+ * Copyright (c) 2018 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -24,72 +24,56 @@
  */
 
 #include <click/config.h>
-#include <clicknet/ip.h>
-#include <clicknet/tcp.h>
-#include "tcpackencap.hh"
-#include "tcpstate.hh"
+#include <click/args.hh>
+#include <click/error.hh>
+#include <click/router.hh>
+#include <click/tcpanno.hh>
+#include "bbrtcppacing.hh"
+#include "../tcpstate.hh"
 CLICK_DECLS
 
-TCPAckEncap::TCPAckEncap()
-{
+BBRTCPPacing::BBRTCPPacing() {
 }
 
-Packet *
-TCPAckEncap::smaction(Packet *q)
-{
-	TCPState *s = TCP_STATE_ANNO(q);
-	click_assert(s);
-
-	// Make space for the TCP header
-	WritablePacket *p = q->push(sizeof(click_tcp));
-	click_assert(p);
-
-	// Header pointer
-	click_tcp *th = reinterpret_cast<click_tcp *>(p->data());
-
-	// TCP header
-	th->th_sport  = s->flow.sport();
-	th->th_dport  = s->flow.dport();
-	th->th_seq    = htonl(s->snd_nxt);
-	th->th_ack    = htonl(s->rcv_nxt);
-	th->th_off    = (sizeof(click_tcp) + TCP_OPLEN_ANNO(p)) >> 2;
-	th->th_flags2 = 0;
-	/**
-	 * DCTCP start
-	 */
-	if (TCP_ECE_FLAG_ANNO(q)){
-		th->th_flags  = TH_ACK | TH_ECE;
+Packet * BBRTCPPacing::smaction(Packet *p) {
+	TCPState *s = TCP_STATE_ANNO(p);
+	if (s->next_send_time == 0
+			or (uint64_t)(s->next_send_time/1000)
+					<= (uint64_t) Timestamp::now_steady().msecval()) {
+        if (s->bbr->pacing_rate)
+            s->next_send_time = (uint64_t)((uint64_t) Timestamp::now_steady().usecval()
+				+ (uint32_t) (p->seg_len() * 1000000 / s->bbr->pacing_rate));
+        else 
+            s->next_send_time = (uint64_t) Timestamp::now_steady().usecval();
+		return p;
+	} else {
+		s->bbr->pcq.push_back(p);
+		if (!s->tx_timer.scheduled()) {
+			s->tx_timer.schedule_after_msec(
+					(uint64_t)((s->next_send_time
+							- (uint64_t) Timestamp::now_steady().usecval())/1000));
+            if (s->bbr->pacing_rate)
+                s->next_send_time = (uint64_t)((uint64_t) Timestamp::now_steady().usecval()
+					+ (uint32_t) (p->seg_len() * 1000000 / s->bbr->pacing_rate));
+            else 
+                s->next_send_time = (uint64_t) Timestamp::now_steady().usecval();
+		}
 	}
-	else
-		th->th_flags  = TH_ACK;
-	/**
-	 * DCTCP end
-	 */
-	th->th_win    = htons(s->rcv_wnd >> s->rcv_wscale);
-	th->th_sum    = 0;
-	th->th_urp    = 0;
-#if HAVE_TCP_DELAYED_ACK
-	if (s->delayed_ack_timer.scheduled())
-		s->delayed_ack_timer.unschedule();
-#endif 
-	return p;
+	return NULL;
 }
 
-void
-TCPAckEncap::push(int, Packet *p)
-{
+void BBRTCPPacing::push(int, Packet *p) {
 	if (Packet *q = smaction(p))
 		output(0).push(q);
 }
 
 Packet *
-TCPAckEncap::pull(int)
-{
+BBRTCPPacing::pull(int) {
 	if (Packet *p = input(0).pull())
-		return smaction(p);
-	else
-		return NULL;
+		smaction(p);
+	return NULL;
 }
 
 CLICK_ENDDECLS
-EXPORT_ELEMENT(TCPAckEncap)
+EXPORT_ELEMENT(BBRTCPPacing)
+ELEMENT_MT_SAFE(BBRTCPPacing)

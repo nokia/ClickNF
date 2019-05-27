@@ -1,8 +1,8 @@
 /*
  * tcpstate.{cc,hh} -- the TCP state
- * Rafael Laufer, Massimo Gallo
+ * Rafael Laufer, Massimo Gallo, Myriana Rifai
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2019 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -80,6 +80,8 @@ TCPState::TCPState(const IPFlowID &f)
     epfd(-1),
     flags(0),
     error(0),
+    rs(new RateSample()),
+    bbr(new BBRState(this)),	
 #if HAVE_TCP_KEEPALIVE
     snd_keepalive_count(0),
 #endif

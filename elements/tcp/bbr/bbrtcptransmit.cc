@@ -1,8 +1,8 @@
 /*
- * tcpreplacepacket.{cc,hh} -- Replace packet, preserving its timestamp
- * Rafael Laufer, Massimo Gallo, Myriana Rifai
+ * bbrtcptransmit.{cc,hh} -- sets packet annotation before transmission
+ * Myriana Rifai
  *
- * Copyright (c) 2019 Nokia Bell Labs
+ * Copyright (c) 2018 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -24,71 +24,60 @@
  */
 
 #include <click/config.h>
-#include <clicknet/tcp.h>
-#include "tcpreplacepacket.hh"
-#include "tcpstate.hh"
+#include <click/args.hh>
+#include <click/error.hh>
+#include <click/router.hh>
+#include <click/tcpanno.hh>
+#include "bbrtcptransmit.hh"
+#include "../tcpstate.hh"
 CLICK_DECLS
 
-TCPReplacePacket::TCPReplacePacket()
-{
+BBRTCPTransmit::BBRTCPTransmit() {
 }
 
 Packet *
-TCPReplacePacket::smaction(Packet *p)
-{
+BBRTCPTransmit::smaction(Packet *p) {
 	TCPState *s = TCP_STATE_ANNO(p);
-
-	// Save timestamp
-	Timestamp now = p->timestamp_anno();
-	
-	// Save ACK REQUIRED annotation
-	bool ackreq = TCP_ACK_FLAG_ANNO(p);
-	bool ecereq = TCP_ECE_FLAG_ANNO(p);
-	// If packet is shared, kill it and allocate a new one
-	if (p->shared()) {
-		// Kill packet
-		p->kill();
-
-		// Replace it with a new one
-		WritablePacket *q = Packet::make(TCP_HEADROOM, NULL, 0, s->snd_mss);
-		click_assert(q);
-
-		// Load timestamp and ACK REQUIRED annotations
-		q->set_timestamp_anno(now);
-		
-		if(ackreq)
-			SET_TCP_ACK_FLAG_ANNO(q);
-		if(ecereq){
-			SET_TCP_ECE_FLAG_ANNO(q);
-		}
-		SET_TCP_STATE_ANNO(q, (uint64_t)s);
-		return q;
+	click_assert(s && !s->txq.empty() && !s->rtxq.empty());
+	/**
+	 * If there are packets already in flight, then we need to start
+	 * delivery rate samples from the time we received the most recent ACK,
+	 * to try to ensure that we include the full time the network needs to
+	 * deliver all in-flight packets.  If there are no packets in flight
+	 * yet, then we can start the delivery rate interval at the current
+	 * time, since we know that any ACKs after now indicate that the network
+	 * was able to deliver those packets completely in the sampling interval
+	 * between now and the next ACK.
+	 *
+	 */
+	if (!s->txq.empty() || !s->rtxq.empty()) {
+		uint64_t tstamp_us = (uint64_t) Timestamp::now_steady().usecval();
+		s->first_sent_time = tstamp_us;
+		s->delivered_ustamp = tstamp_us;
 	}
-
-	// Otherwise, reuse the same packet
-	p->reset();
-	SET_TCP_STATE_ANNO(p, (uint64_t)s);
-	
-	// Load timestamp and ACK REQUIRED annotations
-	p->set_timestamp_anno(now);
-	
-	if(ackreq)
-		SET_TCP_ACK_FLAG_ANNO(p);
-	if(ecereq)
-		SET_TCP_ECE_FLAG_ANNO(p);
+	click_assert(s && p);
+	const click_ip *ip = p->ip_header();
+	const click_tcp *th = p->tcp_header();
+	click_assert(ip && th);
+	if (s->state == TCP_ESTABLISHED) {
+		uint32_t seq = TCP_SEQ(th);
+		uint32_t end = TCP_END(ip, th);
+		pkt_state *p_s = new pkt_state(seq, end, s->delivered,
+				s->first_sent_time, s->delivered_ustamp, s->app_limited, NULL,
+				NULL);
+		s->rs->pkt_states.push_back(p_s);
+		s->bbr->handle_restart_from_idle(s);
+	}
 	return p;
 }
 
-void
-TCPReplacePacket::push(int, Packet *p)
-{
+void BBRTCPTransmit::push(int, Packet *p) {
 	if (Packet *q = smaction(p))
 		output(0).push(q);
 }
 
 Packet *
-TCPReplacePacket::pull(int)
-{
+BBRTCPTransmit::pull(int) {
 	if (Packet *p = input(0).pull())
 		return smaction(p);
 	else
@@ -96,4 +85,5 @@ TCPReplacePacket::pull(int)
 }
 
 CLICK_ENDDECLS
-EXPORT_ELEMENT(TCPReplacePacket)
+EXPORT_ELEMENT(BBRTCPTransmit)
+ELEMENT_MT_SAFE(BBRTCPTransmit)

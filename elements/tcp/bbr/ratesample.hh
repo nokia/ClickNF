@@ -1,8 +1,8 @@
 /*
- * util.{cc,hh} -- generic functions
- * Rafael Laufer, Massimo Gallo, Myriana Rifai
+ * ratesample.{cc,hh} -- Delivery Rate Estimation  draft-cardwell-iccrg-bbr-congestion-control-00
+ * Myriana Rifai
  *
- * Copyright (c) 2019 Nokia Bell Labs
+ * Copyright (c) 2018 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -23,52 +23,42 @@
  *
  */
 
-#ifndef CLICK_UTIL_HH
-#define CLICK_UTIL_HH
+#ifndef CLICK_RateSample_HH
+#define CLICK_RateSample_HH
+#include "../tcpstate.hh"
+#include "pktstatequeue.hh"
+#define BW_SCALE 24
+#define BW_UNIT (1 << BW_SCALE)
 
-#include <click/string.hh>
-#include <linux/types.h>
+CLICK_DECLS
 
-#define MIN(a,b)     (((a) < (b)) ?    (a)    :    (b))
-#define MAX(a,b)     (((a) > (b)) ?    (a)    :    (b))
-#define absdiff(a,b) (((a) > (b)) ? ((a)-(b)) : ((b)-(a)))
-#define mod(a,b)     (a-((a/b)*b))
+class TCPState;
 
-int get_shift(String &s);
 
-inline void prefetch0(const volatile void *p) {
-	asm volatile ("prefetcht0 %[p]" : : [p] "m" (*(const volatile char*)p));
-}
+class RateSample { public:
+	RateSample();
+	~RateSample();
+	void rate_check_app_limited(TCPState *s);
 
-#ifndef MINMAX_H
-#define MINMAX_H
 
-/* A single data point for our parameterized min-max tracker */
-struct minmax_sample {
-	uint32_t	t;	/* time measurement was taken */
-	uint32_t	v;	/* value measured */
+	uint64_t	prior_ustamp,
+				interval_us,
+				rtt_us;
+	uint32_t	delivered,
+				prior_delivered,
+				snd_interval_us,
+				rcv_interval_us,
+				acked_sacked,
+				prior_in_flight;
+
+	bool		is_app_limited,
+				is_retrans,
+				is_ack_delayed;
+	PktStateQueue pkt_states;
+
+
 };
+	
 
-/* State for the parameterized min-max tracker */
-struct minmax {
-	struct minmax_sample s[3];
-};
-
-static inline uint32_t minmax_get(const struct minmax *m)
-{
-	return m->s[0].v;
-}
-
-static inline uint32_t minmax_reset(struct minmax *m, uint32_t t, uint32_t meas)
-{
-	struct minmax_sample val = { t,  meas };
-	m->s[2] = m->s[1] = m->s[0] = val;
-
-	return m->s[0].v;
-}
-
-uint32_t minmax_running_max(struct minmax *m, uint32_t win, uint32_t t, uint32_t meas);
-uint32_t minmax_running_min(struct minmax *m, uint32_t win, uint32_t t, uint32_t meas);
-
-#endif
+CLICK_ENDDECLS
 #endif

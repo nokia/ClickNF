@@ -1,8 +1,8 @@
 /*
- * util.{cc,hh} -- generic functions
- * Rafael Laufer, Massimo Gallo, Myriana Rifai
+ * bbrtcptransmit.{cc,hh} -- sets packet annotation before transmission
+ * Myriana Rifai
  *
- * Copyright (c) 2019 Nokia Bell Labs
+ * Copyright (c) 2018 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -23,52 +23,27 @@
  *
  */
 
-#ifndef CLICK_UTIL_HH
-#define CLICK_UTIL_HH
+#ifndef CLICK_BBRTCPTRANSMIT_HH
+#define CLICK_BBRTCPTRANSMIT_HH
+#include <click/element.hh>
+CLICK_DECLS
 
-#include <click/string.hh>
-#include <linux/types.h>
+class TCPState;
 
-#define MIN(a,b)     (((a) < (b)) ?    (a)    :    (b))
-#define MAX(a,b)     (((a) > (b)) ?    (a)    :    (b))
-#define absdiff(a,b) (((a) > (b)) ? ((a)-(b)) : ((b)-(a)))
-#define mod(a,b)     (a-((a/b)*b))
+class BBRTCPTransmit final : public Element { public:
 
-int get_shift(String &s);
+	BBRTCPTransmit() CLICK_COLD;
 
-inline void prefetch0(const volatile void *p) {
-	asm volatile ("prefetcht0 %[p]" : : [p] "m" (*(const volatile char*)p));
-}
+	const char *class_name() const  { return "BBRTCPTransmit"; }
+	void tcp_rate_sent(TCPState *s, Packet *p);
+	const char *port_count() const  { return PORTS_1_1; }
+	const char *processing() const  { return AGNOSTIC; }
 
-#ifndef MINMAX_H
-#define MINMAX_H
+	Packet *smaction(Packet *);
+	void push(int, Packet *) final;
+	Packet *pull(int);
 
-/* A single data point for our parameterized min-max tracker */
-struct minmax_sample {
-	uint32_t	t;	/* time measurement was taken */
-	uint32_t	v;	/* value measured */
 };
 
-/* State for the parameterized min-max tracker */
-struct minmax {
-	struct minmax_sample s[3];
-};
-
-static inline uint32_t minmax_get(const struct minmax *m)
-{
-	return m->s[0].v;
-}
-
-static inline uint32_t minmax_reset(struct minmax *m, uint32_t t, uint32_t meas)
-{
-	struct minmax_sample val = { t,  meas };
-	m->s[2] = m->s[1] = m->s[0] = val;
-
-	return m->s[0].v;
-}
-
-uint32_t minmax_running_max(struct minmax *m, uint32_t win, uint32_t t, uint32_t meas);
-uint32_t minmax_running_min(struct minmax *m, uint32_t win, uint32_t t, uint32_t meas);
-
-#endif
+CLICK_ENDDECLS
 #endif

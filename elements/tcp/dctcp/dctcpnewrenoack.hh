@@ -1,8 +1,8 @@
 /*
- * util.{cc,hh} -- generic functions
- * Rafael Laufer, Massimo Gallo, Myriana Rifai
+ * tcpnewrenoack.{cc,hh} -- congestion avoidance
+ * Myriana Rifai
  *
- * Copyright (c) 2019 Nokia Bell Labs
+ * Copyright (c) 2018 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -22,53 +22,34 @@
  *
  *
  */
+#ifndef CLICK_DCTCPNEWRENOACK_HH
+#define CLICK_DCTCPNEWRENOACK_HH
 
-#ifndef CLICK_UTIL_HH
-#define CLICK_UTIL_HH
+#include <click/element.hh>
+#include "../tcpstate.hh"
+CLICK_DECLS
 
-#include <click/string.hh>
-#include <linux/types.h>
+class DCTCPNewRenoAck final : public Element { public:
 
-#define MIN(a,b)     (((a) < (b)) ?    (a)    :    (b))
-#define MAX(a,b)     (((a) > (b)) ?    (a)    :    (b))
-#define absdiff(a,b) (((a) > (b)) ? ((a)-(b)) : ((b)-(a)))
-#define mod(a,b)     (a-((a/b)*b))
+	DCTCPNewRenoAck() CLICK_COLD;
 
-int get_shift(String &s);
+	const char *class_name() const { return "DCTCPNewRenoAck"; }
+	const char *port_count() const { return "1/2"; }
+	const char *processing() const { return PROCESSING_A_AH; }
 
-inline void prefetch0(const volatile void *p) {
-	asm volatile ("prefetcht0 %[p]" : : [p] "m" (*(const volatile char*)p));
-}
+	Packet *smaction(Packet *);
+	void push(int, Packet *) final;
+	Packet *pull(int);
 
-#ifndef MINMAX_H
-#define MINMAX_H
+  private:
 
-/* A single data point for our parameterized min-max tracker */
-struct minmax_sample {
-	uint32_t	t;	/* time measurement was taken */
-	uint32_t	v;	/* value measured */
+	inline Packet *handle_ack(Packet *);
+	inline Packet *handle_old(Packet *);
+	inline void send_immediate_ack(Packet *);
+
 };
 
-/* State for the parameterized min-max tracker */
-struct minmax {
-	struct minmax_sample s[3];
-};
 
-static inline uint32_t minmax_get(const struct minmax *m)
-{
-	return m->s[0].v;
-}
-
-static inline uint32_t minmax_reset(struct minmax *m, uint32_t t, uint32_t meas)
-{
-	struct minmax_sample val = { t,  meas };
-	m->s[2] = m->s[1] = m->s[0] = val;
-
-	return m->s[0].v;
-}
-
-uint32_t minmax_running_max(struct minmax *m, uint32_t win, uint32_t t, uint32_t meas);
-uint32_t minmax_running_min(struct minmax *m, uint32_t win, uint32_t t, uint32_t meas);
-
+CLICK_ENDDECLS
 #endif
-#endif
+

@@ -1,8 +1,8 @@
 /*
  * tcpanno.{cc,hh} -- TCP packet annotations
- * Rafael Laufer, Massimo Gallo
+ * Rafael Laufer, Massimo Gallo, Myriana Rifai
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2019 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -84,6 +84,7 @@ CLICK_DECLS
 #define TCP_FLAG_SOCK_DEL  (1 << 4)  // Socket del
 #define TCP_FLAG_SOCK_OUT  (1 << 5)  // Socket out
 #define TCP_FLAG_SOCK_ERR  (1 << 6)  // Socket err
+#define TCP_FLAG_ECE       (1 << 7)  // ECE needed
 
 // Annotations valid only for App - TCPEpoll(Server, Client)
 // NOTE May overwrite TCP Anno
@@ -106,6 +107,13 @@ CLICK_DECLS
                      SET_TCP_FLAGS_ANNO(p, TCP_FLAGS_ANNO(p) | TCP_FLAG_ACK)
 #define RESET_TCP_ACK_FLAG_ANNO(p)  \
                      SET_TCP_FLAGS_ANNO(p, TCP_FLAGS_ANNO(p) & (~TCP_FLAG_ACK))
+
+// ECE needed flag
+#define TCP_ECE_FLAG_ANNO(p)           (TCP_FLAGS_ANNO(p) & TCP_FLAG_ECE)
+#define SET_TCP_ECE_FLAG_ANNO(p)    \
+                     SET_TCP_FLAGS_ANNO(p, TCP_FLAGS_ANNO(p) | TCP_FLAG_ECE)
+#define RESET_TCP_ECE_FLAG_ANNO(p)  \
+                     SET_TCP_FLAGS_ANNO(p, TCP_FLAGS_ANNO(p) & (~TCP_FLAG_ECE))
 
 // More (buffered) segments coming
 #define TCP_MS_FLAG_ANNO(p)            (TCP_FLAGS_ANNO(p) & TCP_FLAG_MS)

@@ -1,8 +1,8 @@
 /*
  * tcptimer.{cc,hh} -- TCP timer implementation
- * Rafael Laufer, Massimo Gallo
+ * Rafael Laufer, Massimo Gallo, Myriana Rifai
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 20179 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -148,6 +148,14 @@ class TCPTimer { public:
 		schedule_after(Timestamp::make_msec(delta_msec));
 	}
 
+	/** @brief Schedule the timer to fire @a delta_usec microseconds.
+	 * @param delta_usec interval until expiration time, in microseconds
+	 *
+	 * @sa schedule_after_usec, schedule_after */
+	inline void schedule_after_usec(uint32_t delta_usec) {
+		schedule_after(Timestamp::make_usec(delta_usec));
+	}
+
 	/** @brief Schedule the timer to fire at @a when_steady.
 	 * @param when_steady expiration time according to the steady clock
 	 *
@@ -192,6 +200,15 @@ class TCPTimer { public:
 	 * @sa schedule_after_msec, reschedule_after */
 	inline void reschedule_after_msec(uint32_t delta_msec) {
 		reschedule_after(Timestamp::make_msec(delta_msec));
+	}
+
+	/** @brief Schedule the timer to fire @a delta_usec microseconds after its
+	 * previous expiry.
+	 * @param delta_usec interval until expiration time, in microseconds
+	 *
+	 * @sa schedule_after_usec, reschedule_after */
+	inline void reschedule_after_usec(uint32_t delta_usec) {
+		reschedule_after(Timestamp::make_usec(delta_usec));
 	}
 
 	/** @brief Unschedule the timer.

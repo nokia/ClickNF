@@ -1,8 +1,8 @@
 /*
  * tcplisten.{cc,hh} -- handles TCP state LISTEN
- * Rafael Laufer, Massimo Gallo
+ * Rafael Laufer, Massimo Gallo, Myriana Rifai
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2019 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -146,8 +146,8 @@ TCPListen::smaction(Packet *p)
 		t->rtx_timer.assign(TCPTimers::rtx_timer_hook, t);
 		t->rtx_timer.initialize(TCPTimers::element(), c);
 
-//		t->tw_timer.assign(TCPTimers::tw_timer_hook, t);
-//		t->tw_timer.initialize(TCPTimers::element(), c);
+		t->tx_timer.assign(TCPTimers::tx_timer_hook, t);
+		t->tx_timer.initialize(TCPTimers::element(), c);
 
 #if HAVE_TCP_KEEPALIVE
 		t->keepalive_timer.assign(TCPTimers::keepalive_timer_hook, t);

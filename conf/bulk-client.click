@@ -1,11 +1,11 @@
-require(library test-tcp-layer2.click)
+require(library general-tcp.click)
 
 define($DEV0 iface, $ADDR0 10.0.20.1, $MAC0 aa:aa:aa:aa:aa:aa)
 AddressInfo($DEV0 $ADDR0 $MAC0);
 
+// CONGCTRL 0::NewReno, 1::DCTCP, 2::BBR
 tcp_layer :: TCPLayer(ADDRS $ADDR0, VERBOSE false, BUCKETS 131072);
 tcp_bulkc :: TCPBulkClient(10.0.20.2, 9000, LENGTH 10G, MSS 1448);
-
 
 tcp_bulkc[0] -> [1]tcp_layer;
 tcp_layer[1] -> [0]tcp_bulkc;

@@ -1,8 +1,8 @@
 /*
  * tcpinfo.hh -- TCP information used in multiple modules
- * Rafael Laufer, Massimo Gallo
+ * Rafael Laufer, Massimo Gallo, Myriana Rifai
  *
- * Copyright (c) 2017 Nokia Bell Labs
+ * Copyright (c) 2019 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -42,6 +42,7 @@ uint32_t TCPInfo::_sys_capacity(TCP_SYS_CAPACITY);
 thread_local uint32_t TCPInfo::_sys_sockets;
 Vector<IPAddress> TCPInfo::_addr;
 uint32_t TCPInfo::_nthreads;
+uint32_t TCPInfo::_cong_control(0);
 
 // Per-core port table
 TCPInfo::PortTable TCPInfo::_portTable;  // Per-core port table
@@ -67,6 +68,7 @@ TCPInfo::configure(Vector<String> &conf, ErrorHandler *errh)
 	_verbose = false;
 
 	if (Args(conf, this, errh)
+		.read("CONGCTRL", _cong_control)	 
 		.read_mp("ADDRS", _addr)
 		.read("RMEM", _rmem)
 		.read("WMEM", _wmem)

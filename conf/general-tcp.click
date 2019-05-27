@@ -1,25 +1,39 @@
-elementclass TCPLayer {	__REST__ $rest |
+elementclass TCPLayer { __REST__ $rest |
+
 
 	// General TCP info
 	TCPInfo($rest);
-
+	
 	// Outgoing packets
+	bbr_out :: TCPSetMssAnno
+			-> BBRTCPTransmit
+	        -> [0]output;  // To the network
+	        
 	tcp_out :: TCPSetMssAnno
 	        -> [0]output;  // To the network
+        
 
+	// Pace packet transmission
+	pace_out :: BBRTCPPacing
+	         -> bbr_out;
+	         
+	classifier :: TCPClassifier -> tcp_out;
+	classifier[1] -> tcp_out;
+	classifier[2] -> pace_out;
+	 
 	// SYN
 	snd_syn :: TCPSynOptionsEncap
 	        -> TCPSynEncap
 	        -> TCPIPEncap
 	        -> TCPEnqueue4RTX
-	        -> tcp_out;
+	        -> classifier;
 
 	// ACK
 	snd_ack :: TCPAckOptionsEncap
 		    -> TCPAckEncap
 		    -> TCPIPEncap
 		    -> TCPEnqueue4RTX
-		    -> tcp_out;
+	        -> classifier;
 
 	// FIN
 	snd_fin :: TCPAckOptionsEncap
@@ -32,6 +46,7 @@ elementclass TCPLayer {	__REST__ $rest |
 	snd_rst :: TCPAckOptionsEncap
 	        -> TCPRstEncap
 	        -> TCPIPEncap
+	        -> TCPEnqueue4RTX
 	        -> tcp_out;
 
 	// Resetter
@@ -49,21 +64,25 @@ elementclass TCPLayer {	__REST__ $rest |
 	socket[4] -> [1]output;
 
 	input[1] -> [0]socket;
-
+	
 	// Retransmissions (header replaced to update timestamp, SACK, WIN, ACK)
+	classifier_rtx :: TCPClassifier -> tcp_out;
+	classifier_rtx[1] -> tcp_out;
+	classifier_rtx[2] -> bbr_out;
+	
 	snd_rtx :: TCPFlagDemux;
 	snd_rtx[0] -> TCPReplacePacket     // SYN or SYN-ACK
 	           -> SetTimestamp
 	           -> TCPSynOptionsEncap
 	           -> TCPSynEncap
 	           -> TCPIPEncap
-	           -> tcp_out;
+	           -> classifier_rtx;
 	snd_rtx[1] -> TCPReplacePacket     // FIN or FIN-ACK
 	           -> SetTimestamp
 	           -> TCPAckOptionsEncap
 	           -> TCPFinEncap
 	           -> TCPIPEncap
-	           -> tcp_out;
+	           -> classifier_rtx;
 	snd_rtx[2] -> SetTimestamp        // ACK
 	           -> StripIPHeader
 	           -> TCPSetSeqAnno
@@ -72,7 +91,7 @@ elementclass TCPLayer {	__REST__ $rest |
 	           -> TCPAckEncap
 	           -> TCPGetSeqAnno
 	           -> TCPIPEncap
-	           -> tcp_out;
+	           -> classifier_rtx;
 
 	// Timers
 	timer :: TCPTimers(TICK 0.001);
@@ -82,8 +101,11 @@ elementclass TCPLayer {	__REST__ $rest |
 	         -> TCPAckEncap
 	         -> TCPIPEncap
 	         -> DecTCPSeqNo
-	         -> tcp_out;
+	         -> classifier;
 	timer[2] -> snd_ack;              // Delayed ACK
+	timer[3] -> classifier_rtx;		      // Paced packet out
+
+
 
 
 	// Received packets
@@ -125,20 +147,58 @@ elementclass TCPLayer {	__REST__ $rest |
 	          -> reorder :: TCPReordering       // Ensure in-order delivery
 	          -> procrst :: TCPProcessRst       // Process RST flag
 	          -> procsyn :: TCPProcessSyn       // Process SYN flag
-	          -> procack :: TCPProcessAck       // Process ACK flag
+	          -> tcp_proc_ack :: TCPClassifier
+	          -> procack :: TCPProcessAck
 	          -> proctxt :: TCPProcessTxt       // Process segment text
 	          -> procfin :: TCPProcessFin       // Process FIN flag
 	          -> congcon :: TCPNewRenoAck       // Update cong. control state
 	          -> TCPReplacePacket               // Kill old and allocate new pkt
 	          -> TCPRateControl                 // Control transmission rate and check if an ACK is needed
 	          -> snd_ack;
+	          
+	          congcon[1] -> snd_rtx;
+	            
+			  tcp_proc_ack[1] 
+			    -> dctcpprocack ::DCTCPProcessAck
+				-> proctxt1 :: TCPProcessTxt       // Process segment text
+	            -> procfin1 :: TCPProcessFin       // Process FIN flag
+	            -> dctcpcongcon :: DCTCPNewRenoAck       // Update cong. control state
+	            -> TCPReplacePacket               // Kill old and allocate new pkt
+	            -> TCPRateControl                 // Control transmission rate and check if an ACK is needed
+	            -> snd_ack;
+	            
+	          dctcpcongcon[1] -> snd_rtx;
+	          
+			  tcp_proc_ack[2] 
+	            -> bbrprocack :: BBRTCPProcessAck       // Process ACK flag
+	            -> procack1 :: TCPProcessAck 
+	            -> proctxt2 :: TCPProcessTxt       // Process segment text
+	            -> procfin2 :: TCPProcessFin       // Process FIN flag
+	            -> bbrcongcon :: BBRTCPAck       // Update cong. control state
+	            -> TCPReplacePacket               // Kill old and allocate new pkt
+	            -> TCPRateControl                 // Control transmission rate and check if an ACK is needed
+	            -> snd_ack;
+	            
+	         bbrcongcon[1] -> snd_rtx;
+	          	
+	         optpars[1] -> TCPReplacePacket -> snd_ack;
+	         ckseqno[1] -> TCPReplacePacket -> snd_ack;
+	             
+	         procsyn[1] -> TCPReplacePacket -> snd_rst;
+	         procack[1] -> TCPReplacePacket -> snd_ack;
+	         procack[2] -> TCPReplacePacket -> snd_rst;
+	         procack[3] -> snd_rtr;
+	             
+             procack1[1] -> TCPReplacePacket -> snd_ack;
+             procack1[2] -> TCPReplacePacket -> snd_rst;
+             procack1[3] -> snd_rtr;
 
-	             optpars[1] -> TCPReplacePacket -> snd_ack;
-	             ckseqno[1] -> TCPReplacePacket -> snd_ack;
-	             procsyn[1] -> TCPReplacePacket -> snd_rst;
-	             procack[1] -> TCPReplacePacket -> snd_ack;
-	             procack[2] -> TCPReplacePacket -> snd_rst;
-	             procack[3] -> snd_rtr;
-	             reorder[1] -> snd_ack;
-	             congcon[1] -> snd_rtx;
+		     dctcpprocack[1] -> TCPReplacePacket -> snd_ack;
+		     dctcpprocack[2] -> TCPReplacePacket -> snd_rst;
+		     dctcpprocack[3] -> snd_rtr;
+	         reorder[1] -> snd_ack; 
+	           
 }
+
+
+

@@ -1,8 +1,8 @@
 /*
- * util.{cc,hh} -- generic functions
- * Rafael Laufer, Massimo Gallo, Myriana Rifai
+ * ratesample.{cc,hh} -- Delivery Rate Estimation  draft-cardwell-iccrg-bbr-congestion-control-00
+ * Myriana Rifai
  *
- * Copyright (c) 2019 Nokia Bell Labs
+ * Copyright (c) 2018 Nokia Bell Labs
  *
  * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
  * 
@@ -23,52 +23,43 @@
  *
  */
 
-#ifndef CLICK_UTIL_HH
-#define CLICK_UTIL_HH
+#include <click/config.h>
+#include <click/packet.hh>
+#include "ratesample.hh"
 
-#include <click/string.hh>
-#include <linux/types.h>
 
-#define MIN(a,b)     (((a) < (b)) ?    (a)    :    (b))
-#define MAX(a,b)     (((a) > (b)) ?    (a)    :    (b))
-#define absdiff(a,b) (((a) > (b)) ? ((a)-(b)) : ((b)-(a)))
-#define mod(a,b)     (a-((a/b)*b))
-
-int get_shift(String &s);
-
-inline void prefetch0(const volatile void *p) {
-	asm volatile ("prefetcht0 %[p]" : : [p] "m" (*(const volatile char*)p));
-}
-
-#ifndef MINMAX_H
-#define MINMAX_H
-
-/* A single data point for our parameterized min-max tracker */
-struct minmax_sample {
-	uint32_t	t;	/* time measurement was taken */
-	uint32_t	v;	/* value measured */
-};
-
-/* State for the parameterized min-max tracker */
-struct minmax {
-	struct minmax_sample s[3];
-};
-
-static inline uint32_t minmax_get(const struct minmax *m)
+RateSample::RateSample()
+:	prior_ustamp(0),
+	interval_us(0),
+	rtt_us(0),
+	delivered(0),
+	prior_delivered(0),
+	snd_interval_us(0),
+	rcv_interval_us(0),
+	acked_sacked(0),
+	prior_in_flight(0),
+	is_app_limited(0),
+	is_retrans(0),
+	is_ack_delayed(0)
 {
-	return m->s[0].v;
 }
 
-static inline uint32_t minmax_reset(struct minmax *m, uint32_t t, uint32_t meas)
-{
-	struct minmax_sample val = { t,  meas };
-	m->s[2] = m->s[1] = m->s[0] = val;
-
-	return m->s[0].v;
+RateSample::~RateSample() {
 }
 
-uint32_t minmax_running_max(struct minmax *m, uint32_t win, uint32_t t, uint32_t meas);
-uint32_t minmax_running_min(struct minmax *m, uint32_t win, uint32_t t, uint32_t meas);
+void RateSample::rate_check_app_limited(TCPState *s){
 
-#endif
-#endif
+		if (/* We have less than one packet to send. */
+		    s->snd_una - s->snd_nxt < s->snd_mss &&
+		    /* Nothing in sending host's qdisc queues or NIC tx queue. */
+			s->txq.packets() < 1 &&
+		    /* We are not limited by CWND. */
+			s->tcp_packets_in_flight() < s->snd_cwnd &&
+		    /* All lost packets have been retransmitted. */
+		    s->rtxq.packets() == 0)
+			s->app_limited =
+				(s->delivered + s->tcp_packets_in_flight()) ? : 1;
+}
+CLICK_ENDDECLS
+#undef click_assert
+ELEMENT_PROVIDES(RateSample)
