@@ -63,7 +63,7 @@ CONFIGURE AND MAKE
 
 To configure ClicNF run this command in its root directory:
 
-./configure --disable-linuxmodule --enable-user-multithread --enable-dpdk --enable-epoll --enable-openssl --enable-batch;
+./configure --disable-linuxmodule --enable-user-multithread --enable-dpdk --enable-epoll --enable-openssl --enable-batch --enable-aqm;
 
 in which:
 
@@ -71,6 +71,7 @@ in which:
 - --enable-user-multithread --enable-dpdk 	enable DPDK input interfaces and packet wrapping (RTE_SDK and RTE_TARGET should be exported)
 - --enable-openssl 				enables ssl* elements
 - --enable-batch 				enables batch processing between elements (May need batcher and unbatcher elements in the graph)
+- --enable-aqm					enables active queue management techniques
 
 To compile ClickNF run this command in its root directory:
 
@@ -118,6 +119,18 @@ then run the client with:
 sudo bin/click --dpdk -c0x1 -n10 -- conf/bulk-client.click
 
 in which parameters inside --dpdk -- are dpdk parameters (-c0x1 COREMASK and -n10 MEMORY CHANNELS )
+
+To modify the TCP flavor (NewReno, DCTCP, BBR) used by the bulk-server/bulk-client edit the TCPLayer CONGCTRL parameter found in the click file. Note that NewReno is the default congestion control methodology. 
+
+To run bulk-server using TCPPrague: 
+
+First run the server with:
+
+sudo bin/click --dpdk -c0x1 -n10 -- conf/bulk-prague-server.click
+
+then run the client with:
+
+sudo bin/click --dpdk -c0x1 -n10 -- conf/bulk-prague-client.click  
 
 Echo server (monolithic):
 -------------------------
