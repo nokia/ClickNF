@@ -24,7 +24,7 @@
  */
 
 #ifndef CLICK_SOCKS4PROXY_HH
-#define CLICK_ECHOSERVER_HH
+#define CLICK_SOCKS4PROXY_HH
 #include <click/element.hh>
 #include <click/tcpanno.hh>
 #include "../tcp/tcpapplication.hh"
